@@ -1,0 +1,1718 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+library(tidyverse) # general utility & workflow functions
+library(tidytext) # tidy implimentation of NLP methods
+library(topicmodels) # for LDA topic modelling 
+library(tm) # general text mining functions, making document term matrixes
+library(SnowballC) # for stemming
+library(dendextend)
+library(shiny)
+library(scales)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(lattice)
+library(ggpubr)
+library(wordcloud)
+library("cowplot")
+library(rvest)
+library(dplyr)
+library(reshape2)
+library(rlang)
+library(syuzhet)
+library(pander)
+library(xlsx)
+library(ggplot2)
+library(RWeka)
+library(RWekajars)
+library(partykit)
+library(DT)
+library(shinydashboard)
+
+setwd("C:/PuneetsData/TextminingApp/Text-Analysis-App-master")
+
+
+ui <- dashboardPage(skin = "purple",
+                    # skin = "red",
+                    dashboardHeader(title = "Text Analytics"),
+                    dashboardSidebar(
+                      #size = "thin", color = "teal",
+                      
+                      # actionButton("display","Display Text"),
+                      sidebarMenu(
+                        
+                        
+                        ##Tab One
+                        menuItem("Import & Format",tabName = "file",icon = icon("file-text-o")),
+                        ##Tab Two
+                        menuItem("Select Dataframe",tabName = "text",icon = icon("file-text-o")),
+                        ##Tab WordBreakdown
+                        menuItem("Text Cleaning",tabName = "cleaning",icon = icon("broom")),
+                        ##Tab WordBreakdown
+                        #menuItem("Word Breakdown",tabName = "breakdown",icon = icon("table")),
+                        ##Tab Three
+                        menuItem("Wordcloud",tabName = "wordcloud",icon = icon("cloud")),
+                        ##Tab Four
+                        menuItem("POS tagging/Results",tabName = "barplot",icon = icon("bar-chart-o")),
+                        ##Tab Five
+                        menuItem("Sentiment Analysis",tabName = "emotionalsentiment",icon = icon("smile-wink")),
+                        ##Tab Six
+                        menuItem(paste("Positive vs. Negative Clusters"),tabName = "pnsentiment",icon = icon("angry")),
+                        ##Tab Percentage
+                        menuItem("Emotional Statistics",tabName = "emotionalpercentages",icon = icon("smile-beam")),
+                        ##Tab Nine
+                        #menuItem("Barplot % by Word",tabName = "plotg",icon = icon("bar-chart-o")),
+                        ##Tab Seven
+                        #menuItem("Plot Trajectory",tabName = "plottrajectory",icon = icon("line-chart")),
+                        ##Tab Eight
+                        menuItem("Word Tokenizer",tabName = "wordtokenizer",icon = icon("table")),
+                        ##Tab Ten
+                        menuItem("Topic Modelling",tabName = "topicmod",icon = icon("rocketchat"),
+                                 menuSubItem("Unsupervised LDA",icon = icon("arrows-alt"), tabName = "unsuper"),
+                                 menuSubItem("Supervised TF-IDF",icon = icon("arrows-alt-h"), tabName = "super")),
+                        ##Tab 
+                        #menuItem("Sentence Sentiment",tabName = "sentencefinder",icon = icon("table")),
+                        ##Works Cited
+                        menuItem("Support Team",tabName = "contact"),
+                        
+                        imageOutput("pictureciti")
+                        
+                        
+                      )),
+                    
+                    
+                    dashboardBody(
+                      tabItems(
+                        tabItem(tabName = "file",
+                                fileInput("selection", "Choose CSV File",
+                                          multiple = FALSE,
+                                          accept = c("text/csv",
+                                                     "text/comma-separated-values,text/plain",
+                                                     ".csv")),
+                                checkboxInput("header", "Header", TRUE),
+                                
+                                # Input: Select separator ----
+                                radioButtons("sep", "Separator",
+                                             choices = c(Comma = ",",
+                                                         Semicolon = ";",
+                                                         Tab = "\t"),
+                                             selected = ","),
+                                
+                                # Input: Select quotes ----
+                                radioButtons("quote", "Quote",
+                                             choices = c(None = "",
+                                                         "Double Quote" = '"',
+                                                         "Single Quote" = "'"),
+                                             selected = '"'),
+                                
+                                # Horizontal line ----
+                                tags$hr(),
+                                
+                                # Input: Select number of rows to display ----
+                                radioButtons("disp", "Display",
+                                             choices = c(Head = "head",
+                                                         All = "all"),
+                                             selected = "head"),
+                                textInput("col11", "Select text column :: "),
+                                tableOutput("contents")
+                                ),
+                        tabItem(tabName = "cleaning",
+                                helpText(paste("                    Please select swtiches : Text Cleaning"),
+                                         br(),
+                                         br()),
+                                checkboxInput(inputId = "tolow",label = "TO Lower",value = FALSE),
+                                checkboxInput(inputId = "punct",label = "Remove Punctuation",value = FALSE),
+                                checkboxInput(inputId = "eng",label = "Remove Englist Stopwords",value = FALSE),
+                                checkboxInput(inputId = "CStemming",label = "Stemming",value = FALSE),
+                                checkboxInput(inputId = "CLemmetizing",label = "Lemmetize",value = FALSE),
+                                checkboxInput(inputId = "CDigits",label = "Remove numbers",value = FALSE),
+                                checkboxInput(inputId = "CAlpha",label = "Remove puntuation&Alpha",value = FALSE),
+                                #checkboxInput(inputId = "wordsz",label = "Remove special words",value = FALSE),
+                                box("Specify the words to remove", br(), "words must be separated by comma eg:- agent,citi,task ",
+                                    textInput("words", "Text input:")
+                                ),
+                                paste("Email: puneet.sinha@citi.com"),
+                                br(),
+                                br()),
+                        tabItem(tabName = "text",
+                                helpText(paste("This tab displays the uploaded text file.")),
+                                br(),
+                                textInput("col11", "Select text column :: "),
+                                br(),
+                                br(),
+                                tableOutput("textx")),
+                        tabItem(tabName = "barplot",
+                                helpText(paste("Parts of Speech tagging for words in the uploaded text "),
+                                         br(),
+                                         paste("via Wordclould we will visulize what kind of Different Parts of Speech we have"),
+                                         br(),
+                                         paste("most frequent words in the text.")),
+                                #actionButton(inputId = "barplot",label = "Create Barplot"),
+                                downloadButton(outputId = "downloadsix",label = "Reports"),
+                                fluidRow(
+                                  helpText(paste("This Wordcloud displays Adjectives uploaded text file.")),
+                                  box(plotOutput("puneetadj")),
+                                  helpText(paste("This Wordcloud displays Transitive Verb uploaded text file.")),
+                                  box(plotOutput("puneetverbtran")),
+                                  helpText(paste("This Wordcloud displays InTransitive Verb uploaded text file.")),
+                                  box(plotOutput("puneetverbintran",width = "100%", height = "400px")),
+                                  
+                                  helpText(paste("This Wordcloud displays Noun uploaded text file.")),
+                                  box(plotOutput("puneetnoun",width = "100%", height = "400px"))
+                                  
+                                )),
+                                
+                                
+
+                                
+                        tabItem(tabName = "wordcloud",
+                                fluidRow(
+                                  box(actionButton(inputId = "update", label = "Generate Plots")),
+                                  
+                                fluidRow(
+                                  helpText(paste("Word Frequency")),
+                                  box(plotOutput("puneetbar",width = "100%", height = "400px")),
+                                  helpText(paste("Wordcloud")),
+                                  box(plotOutput("puneetword",width = "100%", height = "400px")),
+                                  helpText(paste("Bigram Wordcloud")),
+                                  box(plotOutput("bigrampuneet",width = "100%", height = "400px")),
+                                  helpText(paste("Trigram Wordcloud")),
+                                  box(plotOutput("trigrampuneet",width = "100%", height = "400px"))
+
+                                  )
+                                  # fluidRow(
+                                  #   splitLayout(style = "border: 1px solid silver:",  cellWidths = c("25%", "25%","25%", "25%"),
+                                  #               plotOutput("puneetbar"),
+                                  #               br(),
+                                  #               plotOutput("puneetword"),
+                                  #               br(),
+                                  #               plotOutput("bigrampuneet"),
+                                  #               br(),
+                                  #               plotOutput("trigrampuneet")
+                                  #   )
+                                    #plotOutput("puneetbar")
+
+                                    )),
+                        tabItem(tabName = "unsuper",
+                                helpText(paste("                            Unsupervised topic modeling with LDA"),
+                                         br(),
+                                         br(),
+                                         paste("LDA rests on the assumption that each document is going to have some subset of topics 
+                                               in it, and that each topic is associated with a certain subset of words"),
+                                         paste("What LDA outputs, then, is two estimates:"),
+                                         br(),
+                                         paste("1. An estimate of how much each topic contributes to each document"),
+                                         paste("2. An estimate of how much each word contributes to each topic")),
+                                        
+                                         
+                                fluidRow(
+                                  box(actionButton(inputId = "updatelda", label = "Run Topic Modelling"),
+
+                                      
+                                      sliderInput("nooftopics","Minimum Frequency:",min = 1,  max = 20, value = 2),
+                                  plotOutput("ldasupervised")))),
+                        tabItem(tabName = "super",
+                                helpText(paste("                            Supervised topic modeling with TF-IDF"),
+                                         br(),
+                                         br(),
+                                         paste("The general idea behind how TF-IDF works is this:"),
+                                         paste("What LDA outputs, then, is two estimates:"),
+                                         br(),
+                                         paste("1. Words that are very common in a specific document are probably important to the topic of that document"),
+                                         paste("2. Words that are very common in all documents probably aren't important to the topics of any of them")),
+                                textInput("col11", "Select Column in Dataframe have Raw Text :: "),
+                                textInput("callreasons", "Select Lablled column :: "),
+                                actionButton(inputId = "updatelda", label = "Run Topic Modelling"),
+                                
+                                
+                                plotOutput("ldaunsupervised")
+                                ),
+                        tabItem(tabName = "emotionalsentiment",
+                                helpText(paste("This tab allows you to calculate eight types of emotion present within the uploaded text."),
+                                         br(),
+                                         br(),
+                                         
+                                         tags$b(paste("Anger, Anticipation, Disgust, Fear, Joy, Sadness, Surprise, and Trust.")),
+                                         br(),
+                                         
+                                         paste("Each bar represents the overall percentage of each emotion present within the uploaded text file.")),
+                                actionButton("sentiment","Calculate Emotion"),
+                                br(),
+                                br(),
+                                downloadButton("downloadseven","Download Emotional Sentiment Barplot"),
+                                #selectInput(inputId = "download7",label = "Choose Format",choices = list("png","pdf","bmp","jpeg")),
+                                selectInput(inputId = 'colornow',label =  'Color', choices = list("Blue","Red","Yellow","Green","Black","Orange","Pink","Brown","LightGreen","LightBlue","LightGrey"),
+                                            selected = "Blue"),
+                                #checkboxInput(inputId = "horz2",label = "Horizontal Bars",value = FALSE),
+                                plotOutput("nrcplot")),
+                        tabItem(tabName = "pnsentiment",
+                                helpText(paste("Calculate the positive and negative sentiment"),
+                                         br(),
+                                         br(),
+                                         
+                                         tags$b(paste("Positive & Negative")),
+                                         br(),
+                                         paste("The bar graphs displayed are in relation to the percentage of positive and negative words present in the uploaded text.")),
+                                actionButton("negative","Generate Positive & Negative Sentiment"),
+                                br(),
+                                br(),
+                                downloadButton(outputId = "downloadeight",label = "Download Pos vs. Neg Barplot"),
+                                selectInput(inputId = 'colornow2',label =  'Color', choices = list("Blue","Red","Yellow","Green","Black","Orange","Pink","Brown","LightGreen","LightBlue","LightGrey"),
+                                            selected = "Blue"),
+                                br(),
+                                plotOutput("nrcplot2")),
+                        tabItem(tabName = "emotionalpercentages",
+                                box(helpText(paste("This tab will calculate 8 basic universal emotions % in the uploded file", 
+                                                   ""),
+                                             br(),
+                                             
+                                             br(),
+                                             tags$b(paste("Anger, Anticipation, Disgust, Fear, Joy, Sadness, Surprise, and Trust.")),
+                                             
+                                             br(),
+                                             br(),
+                                             a("For Queries Please mail to : puneet.sinha@citi.com",target = "_blank")),
+                                    br(),
+                                    br(),
+                                    actionButton("scsentiment","Access Uploaded File"),
+                                    br(),
+                                    br(),
+                                    downloadButton("downloadfour","Download Results%")),
+                                box(DT::dataTableOutput("scosentiment"))),
+                        tabItem(tabName = "plottrajectory",
+                                helpText(paste("This tab allows you to plot the trajectory of the uploaded text."),
+                                         br(),
+                                         br(),
+                                         paste("The plot will display the overall emotion of pieces of the text at different successive linear locations in the text. Large text files will be more condensed than small text files."),
+                                         br(),
+                                         
+                                         paste("The plot displayed can be thought of as the story arc in a movie or book. If text items besides books are used it is highly suggested to order the text correctly. The graph will show"),
+                                         br(),
+                                         paste("how the emotional content of the uploaded text has changed over time e.g. beginning of a text to the end of the text.The Narrative Timeline axis refers to how the book,text, or comments"),
+                                         br(),
+                                         paste("have changed from the beginning of the text to the end of the same text being analyzed. The Emotional Valence axis refers to the positive/good-ness and the negative/bad-ness of the text."),
+                                         br(),
+                                         paste(" Positive valence or upward motion can be seen as the good linear parts of a story, while Negative Valence can be thought of as bad or negative linear parts of the story. Therefore,"),
+                                         br(),
+                                         paste(" as the plotted line moves up or down it is in turn visualizing the good or bad parts of the text being analyzed.")),
+                                actionButton("trajectory","Create Plot Trajectory"),
+                                br(),
+                                br(),
+                                downloadButton("downloadnine","Download Plot Trajectory"),
+                                plotOutput("nrcplot3")),
+                        tabItem(tabName = "plotg",
+                                helpText(paste("This tab allows you to create a bar chart that displays both the type of emotion and  type of sentiment"),
+                                         br(),
+                                         paste("present within the uploaded text file. The percentage of each emotion and sentiment  is displayed at "),
+                                         br(),
+                                         paste("the top of each bar.")),
+                                actionButton("gplottwo","Create Barplot"),
+                                br(),
+                                br(),
+                                plotOutput("gplot")),
+                        tabItem(tabName = "wordtokenizer",
+                                helpText(paste("This tab allows you to utilize a  word tokenizer to see which words in a text are displayed together."),
+                                         br(),
+                                         paste("You can choose to display words from 1 to 5 tokens. Therefore, words that appear next to each other"),
+                                         br(),
+                                         paste("in the uploaded text will be displayed. If you choose 2, then two words that appear next to each"),
+                                         br(),
+                                         paste("other will be displayed. You can choose up to 5 words that display next to each other, thus allowing"),
+                                         br(),
+                                         paste("you ,the end user, to look for patterns in any text.")),
+                                actionButton("bigram","Create Tokenizer Table"),
+                                numericInput(inputId ="numeric3",label="Tokenizer Min.",min=1,max=5,value=2),
+                                numericInput(inputId="numeric4",label="Tokenizer Max",min=1,max=5,value=2),
+                                DT::dataTableOutput("nrcplot4")
+                        ),
+                        tabItem(tabName = "sentencefinder",
+                                helpText(paste("This tab allows you to display sentences by emotion. A sentence may appear more"),
+                                         br(),
+                                         paste("than once if an one emotion is closely related to another: e.g. anger and disgust.")),
+                                actionButton("emotion","Get Sentence Sentiment"),
+                                br(),
+                                br(),
+                                downloadButton("downloadfive", label="Download Sentence Breakdown"),
+                                br(),
+                                helpText(paste("Select the following number below that corresponds with the emotion you want to display:"),
+                                         br(),
+                                         br(),
+                                         tags$b(paste("1 = Anger   2 = Anticipation   3 = disgust   4 = Fear   5 = Joy")),
+                                         br(),
+                                         br(),
+                                         tags$b(paste("6 = Sadness   7 = Surprise   8 = Trust    9 = Negative   10 =  Positive"))),
+                                numericInput(inputId = 'emselect',label =  'Emotion Selector',
+                                             value = 1,min = 1,max = 10,step = 1),
+                                # selectInput(inputId = 'emselect',label = 'Emotion Selector',
+                                #             choices = names(nrc_data)),
+                                br(),
+                                br(),
+                                DT::dataTableOutput("nrcplot5")),
+                        tabItem(tabName = "breakdown",
+                                helpText(paste("This tab allows you to display the frequency of each word present within the uploaded text file."),
+                                         br(),
+                                         paste("The frequency of each word will be shown and can be searched via the interactive table displayed below.")),
+                                box(actionButton("wbdown","Create Word Breakdown"),
+                                    br(),
+                                    br(),
+                                    downloadButton("downloadtwo", label="Download Word Breakdown")),
+                                DT::dataTableOutput("wordbreakdown")),
+                        
+                        tabItem(tabName = "contact",
+                                helpText(paste("Application Author: Puneet Sinha"),
+                                         br(),
+                                         br(),
+                                         paste("Email: puneet.sinha@citi.com"),
+                                         br(),
+                                         br(),
+                                         paste("Phone: +918888835462")))
+                        
+                        
+                        
+                        
+                        
+                      ))
+)
+
+
+# Define server logic required to draw a histogram
+server <- function(input, output, session) {
+  options(shiny.maxRequestSize=100*1024^2)
+  memory.limit(size = 4095)
+  #read the dataframe
+  
+  ford <- reactive({
+    tryCatch(
+      {
+        df <- read.csv(input$selection$datapath,
+                       header = input$header,
+                       sep = input$sep,
+                       quote = input$quote,
+                       stringsAsFactors=FALSE)
+      },
+      error = function(e) {
+        # return a safeError if a parsing error occurs
+        stop(safeError(e))
+      }
+      
+    )
+    return(df)
+  })
+  
+  output$contents <- renderTable({
+    
+    req(input$selection)
+    
+    # when reading semicolon separated files,
+    # having a comma separator causes `read.csv` to error
+    
+    df<- ford()
+    
+    if(input$disp == "head") {
+      return(head(df))
+    }
+    else {
+      return(df)
+    }
+    
+  })
+  
+  
+  ##codes to return textx
+  output$textx  <- renderTable({
+    req(input$col11)
+    df <- ford()
+    df1 <- df[,input$col11]
+    
+    return(head(df1))
+    
+    
+  })
+  
+  
+  ##Create Term Matrix ###########
+  
+  getTermMatrix <- function(f) {
+    
+    
+    text <- readLines(f$datapath,encoding = "UTF-8")
+    print(as.list(strsplit(input$words,",")))
+    print(typeof(input$words))
+    
+    docs<-Corpus(VectorSource(text))
+    if (input$tolow)
+      print("a")
+    docs<-tm_map(docs, content_transformer(tolower))
+    if(input$punct)
+      print("b")
+    docs<-tm_map(docs, removePunctuation)
+    if(input$CAlpha)
+      print("c")
+    docs<-tm_map(docs, removeNumbers)
+    if(!input$words=="")
+      print("inside")
+    docs<-tm_map(docs, removeWords,strsplit(input$words,",")[[1]])
+    if(input$eng)
+      print("e")
+    docs<-tm_map(docs, removeWords,stopwords("english"))
+    if(input$CStemming)
+      print("f")
+    docs<-tm_map(docs, stemDocument, language="english")
+    
+    myDTM = TermDocumentMatrix(docs,
+                               control = list(minWordLength = 1,wordLengths=c(0,Inf)))
+    
+    m = as.matrix(myDTM)
+    
+    sort(rowSums(m), decreasing = TRUE)
+  }
+  
+  terms <- reactive({
+    
+    getTermMatrix(input$selection)
+    
+    
+  })
+  
+  
+  
+  
+  ##Create Text Terms Object ########### 
+  text_terms <-reactive({
+    
+    
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    # Make a vector source: text_source
+    doc_source<-VectorSource(doc_terms)
+    
+    ## text_source is already in your workspace
+    
+    # Make a volatile corpus: text_corpus
+    doc_corpus <- VCorpus(doc_source)
+    ## text_source is already in your workspace
+    
+    
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),input$words))
+      return(corpus)
+    }
+    
+    doc_corp<-clean_corpus(doc_corpus)
+    
+    doc_dtm<-DocumentTermMatrix(doc_corp)
+    
+    # # Print out text_dtm data
+    
+    
+    # Convert text_dtm to a matrix: text_m
+    doc_m<-as.matrix(doc_dtm)
+    
+    
+    # Calculate the rowSums: term_frequency
+    doc_frequencyone<-rowSums(doc_m)
+    
+    # Sort term_frequency in descending order
+    doc_frequency<-sort(doc_frequencyone,decreasing=TRUE)
+    
+  })
+  
+  observeEvent(input$update,{output$plot <- renderPlot({
+    inFile <- input$selection
+    if (is.null(inFile))
+      return("Please Upload File")
+    withProgress(message = 'Creating WordCloud',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.75)
+                   }
+                 },env = parent.frame(n=1))
+    ##Wordcloud code
+    set.seed(1234)
+    v <- terms()
+    #pal <-brewer.pal(8,"Dark2")
+    wordcloud(names(v), v, scale=c(6,0.5),
+              min.freq = input$freq, max.words=input$max,
+              rot.per=0.35,
+              colors=brewer.pal(8, input$pal))
+  })})
+  
+
+  plotpuneetall <-function(){
+    
+    
+  
+  
+  set.seed(1234)
+  Complaints<- ford()
+  
+  corpus_review <- Corpus(VectorSource(Complaints[,input$col11]))
+  corpus_review <- tm_map(corpus_review, tolower)
+  corpus_review <- tm_map(corpus_review , removePunctuation)
+  corpus_review <- tm_map(corpus_review , stripWhitespace)
+  corpus_review <- tm_map(corpus_review,removeWords , stopwords("english"))
+  #corpus_review <- tm_map(corpus_review, removeWords,c("citibank", "citi","client", "just", "i",'not','the','was','and','that','she','for','with','has','her','having','his','get','been','cannot','why','but','because','when','this','had','into','have','did','being','him','said','could','to','is','on','he','in'))
+  corpus_review <- tm_map(corpus_review , stripWhitespace)
+  #corpus_review <- tm_map(corpus_review , stemDocument)
+  
+  tdm<-TermDocumentMatrix(corpus_review)
+  
+  
+  tdmatrix<-as.matrix(tdm)
+  review_term_freq<-sort(rowSums(tdmatrix), decreasing = TRUE)
+  return(list(corpus_review=corpus_review,review_term_freq=review_term_freq))
+  }
+  
+  output$puneetbar <- renderPlot({
+    rete=plotpuneetall()
+    corpus_review=rete$corpus_review
+    review_term_freq=rete$review_term_freq
+    print(head(corpus_review[[1]]))
+    print(head(review_term_freq))
+    barplot(review_term_freq[1:50] , col ="steel blue" , las=2)
+  } )
+  
+  output$puneetword <- renderPlot({
+    rete=plotpuneetall()
+    corpus_review=rete$corpus_review
+    review_term_freq=rete$review_term_freq
+    pal <-brewer.pal(8,"Dark2")
+    wordcloud(review_word_freq$term , review_word_freq$counts ,scale=c(5,.5),max.words=70 ,colors=pal )
+  })
+  
+  output$bigrampuneet <- renderPlot({
+    rete=plotpuneetall()
+    corpus_review=rete$corpus_review
+    review_term_freq=rete$review_term_freq
+    minfreq_bigram<-2
+    token_delim <- " \\t\\r\\n.!?,;\"()"
+    bitoken <- NGramTokenizer(corpus_review, Weka_control(min=2,max=2, delimiters = token_delim))
+    two_word <- data.frame(table(bitoken))
+    sort_two <- two_word[order(two_word$Freq,decreasing=TRUE),]
+    wordcloud(sort_two$bitoken,sort_two$Freq,random.order=FALSE,scale=c(5,.5),min.freq = minfreq_bigram,colors = brewer.pal(8,"Dark2"),max.words=100,strheight=4,strwidth=4)
+
+  })
+  
+  output$trigrampuneet <- renderPlot({
+    rete=plotpuneetall()
+    corpus_review=rete$corpus_review
+    review_term_freq=rete$review_term_freq
+    minfreq_trigram <- 5
+    token_delim <- " \\t\\r\\n.!?,;\"()"
+    tritoken <- NGramTokenizer(corpus_review, Weka_control(min=3,max=3, delimiters = token_delim))
+    three_word <- data.frame(table(tritoken))
+    sort_three <- three_word[order(three_word$Freq,decreasing=TRUE),]
+    wordcloud(sort_three$tritoken, sort_three$Freq, random.order=FALSE,min.freq = minfreq_trigram,scale=c(5,.5),colors = brewer.pal(8,"Dark2"),max.words=50)
+
+
+  })
+  
+  ############wordclouds for POS
+  output$puneetadj <- renderPlot({
+    SC<- ford()
+    SC %>%
+      unnest_tokens(word, !! rlang::sym(input$col11)) %>%
+      filter(!word %in% stop_words$word) %>%
+      
+      left_join(parts_of_speech) %>%
+      filter(pos == "Adjective") %>%
+      
+      count(word,sort = TRUE) %>%
+      ungroup()  %>%
+      head(50) %>%
+      
+      with(wordcloud(word, n, scale=c(5,.5),max.words = 50,colors=brewer.pal(8, "Dark2")))
+    
+  })
+  output$puneetverbtran <- renderPlot({
+    SC<- ford()
+    SC %>%
+      unnest_tokens(word, !! rlang::sym(input$col11)) %>%
+      filter(!word %in% stop_words$word) %>%
+      
+      left_join(parts_of_speech) %>%
+      filter(pos == "Verb (transitive)") %>%
+      
+      count(word,sort = TRUE) %>%
+      ungroup()  %>%
+      head(50) %>%
+      
+      with(wordcloud(word, n,scale=c(5,.5), max.words = 50,colors=brewer.pal(8, "Dark2")))
+    
+  })
+  output$puneetverbintran <- renderPlot({
+    SC<- ford()
+    SC %>%
+      unnest_tokens(word, !! rlang::sym(input$col11)) %>%
+      filter(!word %in% stop_words$word) %>%
+      
+      left_join(parts_of_speech) %>%
+      filter(pos == "Verb (intransitive)") %>%
+      
+      count(word,sort = TRUE) %>%
+      ungroup()  %>%
+      head(50) %>%
+      
+      with(wordcloud(word, n,scale=c(5,.5), max.words = 50,colors=brewer.pal(8, "Dark2")))
+    
+  })
+  output$puneetnoun <- renderPlot({
+    SC<- ford()
+    SC %>%
+      unnest_tokens(word, !! rlang::sym(input$col11)) %>%
+      filter(!word %in% stop_words$word) %>%
+      left_join(parts_of_speech) %>%
+      filter(pos == "Noun") %>%
+      
+      count(word,sort = TRUE) %>%
+      ungroup()  %>%
+      head(30) %>%
+      
+      with(wordcloud(word, n,scale=c(5,.5), max.words = 30,colors=brewer.pal(8, "Dark2")))
+    
+  })
+  
+  
+
+  # # review_tdm <- removeSparseTerms(tdm, sparse=0.9)
+  # # hc <- hclust(d = dist(review_tdm, method = "euclidean"), method = "complete")
+  # # 
+  # # # Plot a dendrogram
+  # # puneetdendo=plot(hc)
+
+  # # Trigrams 
+  # 
+  # minfreq_trigram <- 5
+  # 
+  # token_delim <- " \\t\\r\\n.!?,;\"()"
+  # tritoken <- NGramTokenizer(corpus_review, Weka_control(min=3,max=3, delimiters = token_delim))
+  # three_word <- data.frame(table(tritoken))
+  # sort_three <- three_word[order(three_word$Freq,decreasing=TRUE),]
+  # wordcloud(sort_three$tritoken, sort_three$Freq, random.order=FALSE,min.freq = minfreq_trigram,scale = c(1.2,0.35),colors = brewer.pal(8,"Dark2"),max.words=50)
+  # print("Entered to form a grid")
+  # #ptlist <- list(puneetbar,puneetword,bigrampuneet,trigrampuneet)
+  # #arrangeGrob(puneetbar,puneetword,bigrampuneet,trigrampuneet)
+  # #grid.arrange(grobTree(puneetbar),grobTree(puneetword),ncol=length(ptlist))
+  # #ggarrange( bigrampuneet,trigrampuneet,ncol = 2, nrow = 2)
+  # puneetbar
+  # print("hi")
+  # 
+  # 
+  # 
+  # # #pal <-brewer.pal(8,"Dark2")
+  # # wordcloud(names(v), v, scale=c(6,0.5),
+  # #           min.freq = input$freq, max.words=input$max,
+  # #           rot.per=0.35,
+  # #           colors=brewer.pal(8, input$pal))
+  # }
+  observeEvent(input$update,{output$plot <- renderPlot({
+    inFile <- input$selection
+    if (is.null(inFile))
+      return("Please Upload File")
+    withProgress(message = 'Creating maps',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.75)
+                   }
+                 },env = parent.frame(n=1))
+    plotpuneetall()
+
+  })})
+    
+    
+  
+  
+  
+  
+  ## Barplot plot code ######
+  
+  observeEvent(input$barplot,{output$plot2<-renderPlot({
+    withProgress(message = 'Creating BarPlot',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    # Make a vector source: text_source
+    doc_source<-VectorSource(doc_terms)
+    
+    
+    
+    # Make a volatile corpus: text_corpus
+    doc_corpus <- VCorpus(doc_source)
+    
+    
+    
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),c(input$words)))
+      return(corpus)
+    }
+    
+    doc_corp<-clean_corpus(doc_corpus)
+    
+    doc_dtm<-DocumentTermMatrix(doc_corp)
+    
+    
+    
+    # Convert text_dtm to a matrix: text_m
+    doc_m<-as.matrix(doc_dtm)
+    
+    
+    
+    # Calculate the rowSums: term_frequency
+    doc_frequencyone<-colSums(doc_m)
+    
+    # Sort term_frequency in descending order
+    doc_frequency<-sort(doc_frequencyone,decreasing=TRUE)
+    # termstwo<-text_terms()
+    
+    
+    # Plot a barchart of the 10 most common words,  
+    barplot(doc_frequency[input$numeric:input$numeric2],col=input$color,horiz = input$horz,las=2)
+  })})
+  
+  
+  
+  
+  ## Download code for wordcloud picture download ####
+  
+  output$download1 <- downloadHandler(
+    filename = function() { paste("WordCloud",input$download3,sep = ".") },
+    content = function(file) {
+      if(input$download3=="png")
+        png(file)
+      else if (input$download3=="jpeg")
+        jpeg(file)
+      else if (input$download3=="bmp")
+        bmp(file)
+      else if (input$download3=="pdf")
+        pdf(file)
+      set.seed(1234)
+      v <- terms()
+      wordcloud(names(v),v, scale=c(6,0.5),
+                min.freq = input$freq, max.words=input$max,
+                rot.per=0.35,
+                colors=brewer.pal(8, input$pal))
+      dev.off()
+    })
+  
+  
+  
+  ##Display Text of Uploaded File ###############
+  
+  observeEvent(input$display,{output$text<-renderText({
+    inFile <- input$selection
+    if (is.null(inFile))
+      return("Please Upload File")
+    ford()})})
+  
+  
+  
+  ## Creates word breakdown matrix for csv file #####
+  
+  texterdf2<- reactive({
+    
+    withProgress(message = 'Downloading CSV File',
+                 value = 0, {
+                   for (i in 1:10) {
+                     incProgress(1/10)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    # Make a vector source
+    doc_source<-VectorSource(doc_terms)
+    
+    # Make a volatile corpu
+    text <- VCorpus(doc_source)
+    
+    ##Function to Clean the Corpus
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus<- tm_map(corpus,removeNumbers)
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),"the","you","httpstco","for","amp","today","--"))
+      return(corpus)
+    }
+    
+    # Apply your customized function to the text_corp: clean_corp
+    text_corp<-clean_corpus(text)
+    
+    
+    # Create the dtm from the corpus: text_dtm
+    text_dtm<-DocumentTermMatrix(text_corp)
+    
+    # Convert text_dtm to a matrix: text_m
+    text_m<-as.matrix(text_dtm)
+    
+    ## Calculate the rowSums: term_frequency ##################################################################
+    term_frequency<-colSums(text_m)
+    
+    # Sort term_frequency in descending order
+    term_frequency<-sort(term_frequency,decreasing=TRUE)
+    
+    ##Creates data frame of words ########
+    text_freq<-data.frame(term=names(term_frequency),num=term_frequency)
+    text_freq
+    return(text_freq)
+    
+  })
+  
+  
+  
+  ##Textbreakdown Download ###########
+  
+  output$downloadtwo <- downloadHandler(
+    filename = function() { paste("TextBreakDown",input$name, sep='',".csv") },
+    content = function(file) {
+      write.csv(texterdf2(), file)
+      
+    })
+  
+  
+  
+  ##Emotional Sentiment Analysis ###########
+  observeEvent(input$sentiment,{output$nrcplot<-renderPlot({
+    withProgress(message = 'Calculating Emotional Sentiment by Word',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    value<- ford()
+    print(head(value))
+    value<-value[,input$col11]
+    
+    print(head(value))
+    
+    
+    #val_word <- get_tokens(value, pattern = "\\W")
+    
+    value <- get_nrc_sentiment(as.character(value))
+    
+    ##################newcode
+    result1<-data.frame(t(value))
+    #rowSums computes column sums across rows for each level of a #grouping variable.
+    new_result <- data.frame(rowSums(result1))
+    #name rows and columns of the dataframe
+    names(new_result)[1] <- "count"
+    new_result <- cbind("sentiment" = rownames(new_result), new_result)
+    rownames(new_result) <- NULL
+    #plot the first 8 rows,the distinct emotions
+    print("complete")
+    qplot(sentiment, data=new_result[1:8,], weight=count, geom="bar",fill=sentiment)+ggtitle("Text Sentiments")
+    ######################
+    
+    #value
+    
+    #Barplot of Emotional Sentiment
+    # barplot(
+    #   sort(colSums(prop.table(value[, 1:8]))),
+    #   # horiz = input$horz2,
+    #   cex.names = 0.7,
+    #   las = 1,
+    #   main = "Emotional Sentiment by Word"
+    #   ,col = input$colornow
+    # )
+    #print("complete")
+    
+    
+    
+  })})
+  
+  
+  
+  ##Positive and Negative Sentiment Analysis ##########
+  
+  ##Sentiment Try 
+  observeEvent(input$negative,{output$nrcplot2<-renderPlot({
+    withProgress(message = 'Calculating Positive & Negative Sentiment by Word',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    value<- ford()
+    value<-value[,input$col11]
+    
+    #val_word <- get_tokens(value, pattern = "\\W")
+    
+    value <- get_nrc_sentiment(as.character(value))
+    
+    value
+    
+    ##Barplot of Emotional Sentiment
+    barplot(
+      sort(colSums(prop.table(value[, 9:10]))),
+      # horiz = input$horz2,
+      cex.names = 0.7,
+      las = 1,
+      main = "Positive vs. Negative Sentiment"
+      ,col = input$colornow2
+    )
+    
+    
+    
+  })})
+  
+  
+  
+  
+  
+  ##Get Trajectory #########
+  
+  ## Plot Trajectory #########
+  observeEvent(input$trajectory,{output$nrcplot3<-renderPlot({
+    withProgress(message = 'Creating Plot Trajectory',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    s_v <- get_sentences(value)
+    s_v_sentiment <- get_sentiment(s_v)
+    plot(
+      s_v_sentiment, 
+      type="l", 
+      main="Plot Trajectory", 
+      xlab = "Narrative Timeline", 
+      ylab= "Emotional Valence"
+    )
+    
+  })})
+  
+  
+  ##Bigram Frequencies ####
+  
+  
+  ##ggplot2 All Sentiment ##########
+  
+  
+  
+  
+  
+  ##Tokenizer Table ###################
+  
+  ##Reactive for Tokenizer Table 
+  wordbreak2d<-reactive({
+    
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    # Make a vector source: doc_source
+    doc_source<-VectorSource(doc_terms)
+    
+    
+    
+    # Make a volatile corpus: doc_corpus
+    doc_corpus <- VCorpus(doc_source)
+    
+    
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),c(input$words)))
+      return(corpus)
+    }
+    
+    
+    doc_corp<-clean_corpus(doc_corpus)
+    
+    tokenizer<-function(x)
+      NGramTokenizer(x,Weka_control(min=input$numeric3,max=input$numeric4))
+    
+    doc_dtm<-DocumentTermMatrix(doc_corp,control = list(tokenize = tokenizer))
+    
+    
+    # Convert doc_dtm to a matrix: doc_m
+    doc_m<-as.matrix(doc_dtm)
+    
+    
+    # Calculate the rowSums: term_frequency
+    doc_frequencyone<-colSums(doc_m)
+    
+    
+    # Sort term_frequency in descending order
+    doc_frequency<-names(doc_frequencyone)
+    
+    doc_frequency <- as.data.frame(doc_frequency)
+    
+    colnames(doc_frequency) <- c("Tokenized Words")
+    
+    doc_frequency
+    
+  })
+  
+  
+  observeEvent(input$bigram,{output$nrcplot4<-DT::renderDataTable({
+    withProgress(message = 'Creating Bigram Table',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    
+    DT::datatable(
+      wordbreak2d(),extensions = 'Buttons', options = list(
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+      ))
+    
+  })})
+  
+  
+  ##Sentence Finder ##########
+  
+  texterdf5<- reactive({
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    s_v <- get_sentences(value)
+    
+    nrc_data <- get_nrc_sentiment(s_v)
+    
+    # x <- input$emselect,
+    
+    emotion_conveyed <- which(nrc_data[,input$emselect] > 0)
+    
+    
+    
+    final <- as.matrix(s_v[emotion_conveyed])
+    
+    final
+  })
+  
+  observeEvent(input$emotion,{output$nrcplot5<-DT::renderDataTable({
+    withProgress(message = 'Getting Sentences',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    DT::datatable(
+      texterdf5(),extensions = 'Buttons', options = list(
+        dom = 'Bfrtip',
+        buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+      ))
+    
+  })})
+  
+  
+  
+  
+  
+  ##Sentiment Analysis Score ###########
+  observeEvent(input$scsentiment,{output$scosentiment<-DT::renderDataTable({
+    withProgress(message = 'Calculating Emotional Sentiment',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    value<- ford()
+    value<-value[,input$col11]
+    
+    value <- get_nrc_sentiment(as.character(value))
+    
+    #colSums(as.matrix(value))
+    
+    prop.table(value[,1:8])
+    
+    sentimentscores <- round(colSums(prop.table((value[,1:8])))*100,digits = 1)
+    # sentimentscores <- as.matrix(sentimentscores)
+    # sentimentscores 
+    sentimentscores <- as.data.frame(sentimentscores)
+    colnames(sentimentscores) <- c("Percentages")
+    
+    
+    Emotions <- c("anger","anticipation","disgust","fear","joy","sadness",
+                  "surprise","trust")
+    
+    
+    Percentages<- sentimentscores$Percentages
+    emotionality<- cbind(Emotions,Percentages)
+    emotionality
+    
+    
+  })})
+  
+  
+  ##Dataframe for Wordbreakdown ####
+  
+  texterdf3<- reactive({
+    
+    # withProgress(message = 'Creating Word Breakdown',
+    #              value = 0, {
+    #                for (i in 1:10) {
+    #                  incProgress(1/10)
+    #                  Sys.sleep(0.25)
+    #                }
+    #              },env = parent.frame(n=1))
+    
+    
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    doc_source<-VectorSource(doc_terms)
+    
+    # Make a volatile corpus: rom_corpus
+    text <- VCorpus(doc_source)
+    
+    
+    
+    ##Function to Clean the Corpus
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus<- tm_map(corpus,removeNumbers)
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),"the","you","httpstco","for","amp","today","--"))
+      return(corpus)
+    }
+    
+    # Apply your customized function to the text_corp: clean_corp
+    text_corp<-clean_corpus(text)
+    
+    
+    # Create the dtm from the corpus: text_dtm
+    text_dtm<-DocumentTermMatrix(text_corp)
+    
+    # Convert text_dtm to a matrix: text_m
+    text_m<-as.matrix(text_dtm)
+    
+    
+    ## Calculate the rowSums: term_frequency ##################################################################
+    term_frequency<-colSums(text_m)
+    
+    # Sort term_frequency in descending order
+    term_frequency<-sort(term_frequency,decreasing=TRUE)
+    
+    ##Creates data frame of words ########
+    text_freq<-data.frame(term=names(term_frequency),num=term_frequency)
+    colnames(text_freq) <- c("Term","Number of Occurences")
+    text_freq
+    return(text_freq)
+    
+  })
+  
+  
+  
+  
+  ##Word Breakdown Table ####  
+  observeEvent(input$wbdown,{output$wordbreakdown<-DT::renderDataTable({
+    withProgress(message = 'Creating Word Breakdown',
+                 value = 0, {
+                   for (i in 1:3) {
+                     incProgress(1/3)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    worddatabreakdown<- as.matrix.data.frame(texterdf3())  
+    
+    wordatabreakdown <- worddatabreakdown[,1:2]
+    wordatabreakdown
+    
+    
+  })})
+  
+  ##Download for Sentiment Percentages ####
+  
+  texterdf4<- reactive({
+    
+    withProgress(message = 'Downloading Emotional % CSV File',
+                 value = 0, {
+                   for (i in 1:10) {
+                     incProgress(1/10)
+                     Sys.sleep(0.25)
+                   }
+                 },env = parent.frame(n=1))
+    
+    
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    value <- get_nrc_sentiment(value)
+    
+    #colSums(as.matrix(value))
+    
+    prop.table(value[,1:8])
+    
+    sentimentscores <- round(colSums(prop.table((value[,1:8])))*100,digits = 1)
+    
+    sentimentscores <- as.data.frame(sentimentscores)
+    
+    colnames(sentimentscores) <- c("Percentages")
+    
+    
+    Emotions <- c("anger","anticipation","disgust","fear","joy","sadness",
+                  "surprise","trust","negative","positive")
+    
+    
+    Percentages<- sentimentscores$Percentages
+    
+    emotionality<- cbind(Emotions,Percentages)
+    
+  })
+  
+  output$downloadfour <- downloadHandler(
+    filename = function() { paste("Emotional Percentage Breakdown",input$name, sep='',".csv") },
+    content = function(file) {
+      write.csv(texterdf4(), file)
+      
+    })
+  
+  output$downloadfive <- downloadHandler(
+    filename = function() { paste("Emotion by Sentence Breakdown",input$name, sep='',".csv") },
+    content = function(file) {
+      write.csv(texterdf5(), file)
+      
+    })
+  
+  barplotdw <- reactive({
+    doc_terms<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    # Make a vector source: text_source
+    doc_source<-VectorSource(doc_terms)
+    
+    ## text_source is already in your workspace
+    
+    # Make a volatile corpus: text_corpus
+    doc_corpus <- VCorpus(doc_source)
+    ## text_source is already in your workspace
+    
+    
+    clean_corpus <- function(corpus){
+      corpus <- tm_map(corpus, stripWhitespace)
+      corpus <- tm_map(corpus, removePunctuation)
+      corpus <- tm_map(corpus, content_transformer(tolower))
+      corpus <- tm_map(corpus, removeWords, c(stopwords("english"),c(input$words)))
+      return(corpus)
+    }
+    
+    doc_corp<-clean_corpus(doc_corpus)
+    
+    doc_dtm<-DocumentTermMatrix(doc_corp)
+    
+    # Convert text_dtm to a matrix: text_m
+    doc_m<-as.matrix(doc_dtm)
+    
+    
+    # Calculate the rowSums: term_frequency
+    doc_frequencyone<-colSums(doc_m)
+    
+    # Sort term_frequency in descending order
+    doc_frequency<-sort(doc_frequencyone,decreasing=TRUE)
+    
+    # Plot a barchart of the 10 most common words,  
+    barplot(doc_frequency[input$numeric:input$numeric2],col=input$color,horiz = input$horz,las=2)
+    
+  })
+  
+  ##Barplot download code ######
+  output$downloadsix <- downloadHandler(
+    filename = function() { paste("Barplot",input$download6,sep = ".") },
+    content = function(file) {
+      if(input$download6=="png")
+        png(file)
+      else if (input$download6=="jpeg")
+        jpeg(file)
+      else if (input$download6=="bmp")
+        bmp(file)
+      else if (input$download6=="pdf")
+        pdf(file)
+      withProgress(message = 'Downloading BarPlot',
+                   value = 0, {
+                     for (i in 1:3) {
+                       incProgress(1/3)
+                       Sys.sleep(0.25)
+                     }
+                   },env = parent.frame(n=1))
+      
+      doc_terms<- ford()
+      doc_terms<-doc_terms[,input$col11]
+      
+      # Make a vector source: text_source
+      doc_source<-VectorSource(doc_terms)
+      
+      ## text_source is already in your workspace
+      
+      # Make a volatile corpus: text_corpus
+      doc_corpus <- VCorpus(doc_source)
+      ## text_source is already in your workspace
+      
+      
+      clean_corpus <- function(corpus){
+        corpus <- tm_map(corpus, stripWhitespace)
+        corpus <- tm_map(corpus, removePunctuation)
+        corpus <- tm_map(corpus, content_transformer(tolower))
+        corpus <- tm_map(corpus, removeWords, c(stopwords("english"),c(input$words)))
+        return(corpus)
+      }
+      
+      doc_corp<-clean_corpus(doc_corpus)
+      
+      doc_dtm<-DocumentTermMatrix(doc_corp)
+      
+      # # Print out text_dtm data
+      # print(text_dtm)
+      
+      # Convert text_dtm to a matrix: text_m
+      doc_m<-as.matrix(doc_dtm)
+      
+      # # Create a matrix: text_m
+      
+      
+      # Calculate the rowSums: term_frequency
+      doc_frequencyone<-colSums(doc_m)
+      
+      # Sort term_frequency in descending order
+      doc_frequency<-sort(doc_frequencyone,decreasing=TRUE)
+      # termstwo<-text_terms()
+      
+      # [c(input$subset1),c(input$subset2)]
+      # Plot a barchart of the 10 most common words,  
+      barplot(doc_frequency[input$numeric:input$numeric2],col=input$color,horiz = input$horz,las=2)
+      dev.off()
+    })
+  
+  ##Emotional Sentiment Download Code ####
+  
+  
+  ##Emotion ggplot2 reactive download code for barplot###### 
+  emotplot1 <- reactive({
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    val_word <- get_tokens(value, pattern = "\\W")
+    
+    value <- get_nrc_sentiment(value)
+    
+    
+    value <- as.data.frame(sort(colSums((prop.table(value[,1:8])))))
+    
+    colnames(value) <- "percentages"
+    
+    ggplot1<- ggplot(value, aes(x=sort(rownames(value),decreasing = FALSE), y=value$percentages)) +
+      # plot the bars
+      geom_bar(stat="identity", position="dodge",fill=input$colornow) +
+      # create the label, "dodged" to fit the bars
+      geom_text(aes(label=percent(value$percentages)), vjust=1, colour="white",
+                position=position_dodge(.9), size=4)+labs(title="Emotional Sentiment",y = "Percentage",x="Emotion")+
+      theme(panel.background = element_blank())
+  })
+  
+  output$downloadseven <- downloadHandler(
+    filename = function() { paste("Emotional Sentiment",'png',sep = ".") },
+    content = function(file) {
+      # if(input$download6=="png")
+      #   png(file)
+      # else if (input$download6=="jpeg")
+      #   jpeg(file)
+      # else if (input$download6=="bmp")
+      #   bmp(file)
+      # else if (input$download6=="pdf")
+      #   pdf(file)
+      withProgress(message = 'Downloading BarPlot',
+                   value = 0, {
+                     for (i in 1:3) {
+                       incProgress(1/3)
+                       Sys.sleep(0.25)
+                     }
+                   },env = parent.frame(n=1))
+      ggsave(file,emotplot1())})
+  
+  ##Positive vs Negative ggplot2 download code #######
+  emotplot2 <- reactive({
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    val_word <- get_tokens(value, pattern = "\\W")
+    
+    value <- get_nrc_sentiment(value)
+    
+    
+    value <- as.data.frame(sort(colSums((prop.table(value[,9:10])))))
+    
+    colnames(value) <- "percentages"
+    
+    ggplot1<- ggplot(value, aes(x=sort(rownames(value),decreasing = FALSE), y=value$percentages))+
+      # plot the bars
+      geom_bar(stat="identity", position="dodge",fill=input$colornow2) +
+      # create the label, "dodged" to fit the bars
+      geom_text(aes(label=percent(value$percentages)), vjust=1, colour="white",
+                position=position_dodge(.9), size=4)+labs(title="Positive vs. Negative Sentiment",y = "Percentage",x="Sentiment")+
+      theme(panel.background = element_blank())
+  })
+  
+  
+  ##Positive vs Negative GGPLOT2 Download Code ######
+  output$downloadeight <- downloadHandler(
+    filename = function() { paste("Positive vs. Negative Sentiment",'png',sep = ".") },
+    content = function(file) {
+      # if(input$download6=="png")
+      #   png(file)
+      # else if (input$download6=="jpeg")
+      #   jpeg(file)
+      # else if (input$download6=="bmp")
+      #   bmp(file)
+      # else if (input$download6=="pdf")
+      #   pdf(file)
+      withProgress(message = 'Downloading BarPlot',
+                   value = 0, {
+                     for (i in 1:3) {
+                       incProgress(1/3)
+                       Sys.sleep(0.25)
+                     }
+                   },env = parent.frame(n=1))
+      ggsave(file,emotplot2())})
+  
+  
+  
+  sentimentplot<- reactive({
+    value<- ford()
+    doc_terms<-doc_terms[,input$col11]
+    
+    s_v <- get_sentences(value)
+    s_v_sentiment <- get_sentiment(s_v)
+    plot(
+      s_v_sentiment, 
+      type="l", 
+      main="Plot Trajectory", 
+      xlab = "Narrative Timeline", 
+      ylab= "Emotional Valence"
+    )
+  })
+  
+  ##Plot Trajectory Download Code #############
+  output$downloadnine <- downloadHandler(
+    filename = function() { paste("Plot Trajectory",'png',sep = ".") },
+    content = function(file) {
+      # if(input$download6=="png")
+      #   png(file)
+      # else if (input$download6=="jpeg")
+      #   jpeg(file)
+      # else if (input$download6=="bmp")
+      #   bmp(file)
+      # else if (input$download6=="pdf")
+      #   pdf(file)
+      withProgress(message = 'Downloading Plot Trajectory',
+                   value = 0, {
+                     for (i in 1:3) {
+                       incProgress(1/3)
+                       Sys.sleep(0.25)
+                     }
+                   },env = parent.frame(n=1))
+      
+      ggsave(file,sentimentplot())
+    })
+  
+  # output$downloadromeo <- downloadHandler(
+  #   filename <- function() {
+  #     paste("RomeoandJuliet",".txt", sep="")
+  #   },
+  #   
+  #   content <- function(file) {
+  # 
+  #    write.table(romeotext(), file)
+  #   }
+  # )
+  
+  # output$downloadromeo <- downloadHandler(
+  #   filename = function() { paste("Text", sep='',".txt") },
+  #   content = function(file) {
+  #     write.table(romeotext(), file)
+  #     
+  #   })
+  
+  datasetromeo <- reactive({
+    switch(input$datasetten,
+           "Romeo and Juliet" = "romeo.txt",
+           "Othello" = "othello.txt",
+           "Midsummer Nights Dream" = "midsummers.txt")
+  })
+  
+  output$downloadromeo <- downloadHandler(
+    filename <- function() {
+      paste(input$datasetten, "txt", sep=".")
+    },
+    
+    content <- function(file) {
+      file.copy(datasetromeo(), file)
+    },
+    contentType = "text"
+  )
+  
+  top_terms_by_topic_LDA <- function(input_text, # should be a columm from a dataframe
+                                     plot = T, # return a plot? TRUE by defult
+                                     number_of_topics = 4) # number of topics (4 by default)
+  {
+    print("inside lda function")
+    # create a corpus (type of object expected by tm) and document term matrix
+    Corpus <- Corpus(VectorSource(input_text)) # make a corpus object
+    DTM <- DocumentTermMatrix(Corpus) # get the count of words/document
+    
+    # remove any empty rows in our document term matrix (if there are any 
+    # we'll get an error when we try to run our LDA)
+    unique_indexes <- unique(DTM$i) # get the index of each unique value
+    DTM <- DTM[unique_indexes,] # get a subset of only those indexes
+    
+    # preform LDA & get the words/topic in a tidy text format
+    lda <- LDA(DTM, k = number_of_topics, control = list(seed = 1234))
+    topics <- tidy(lda, matrix = "beta")
+    
+    # get the top ten terms for each topic
+    top_terms <- topics  %>% # take the topics data frame and..
+      group_by(topic) %>% # treat each topic as a different group
+      top_n(10, beta) %>% # get the top 10 most informative words
+      ungroup() %>% # ungroup
+      arrange(topic, -beta) # arrange words in descending informativeness
+    
+    # if the user asks for a plot (TRUE by default)
+    if(plot == T){
+      # plot the top ten terms for each topic in order
+      top_terms %>% # take the top terms
+        mutate(term = reorder(term, beta)) %>% # sort terms by beta value 
+        ggplot(aes(term, beta, fill = factor(topic))) + # plot beta by theme
+        geom_col(show.legend = FALSE) + # as a bar plot
+        facet_wrap(~ topic, scales = "free") + # which each topic in a seperate plot
+        labs(x = NULL, y = "Beta") + # no x label, change y label 
+        coord_flip() # turn bars sideways
+    }else{ 
+      # if the user does not request a plot
+      # return a list of sorted terms instead
+      return(top_terms)
+    }
+  }
+  observeEvent(input$updatelda,{output$ldasupervised <- renderPlot({
+    print("lda started")
+
+    withProgress(message = 'Running LDA on the Text Kindly wait for results to populate',
+                 value = 0, {
+                   for (i in 1:8) {
+                     incProgress(1/8)
+                     Sys.sleep(1)
+                   }
+                 },env = parent.frame(n=1))
+    doc_terms<- ford()
+    
+
+    #calling lda function
+    top_terms_by_topic_LDA(doc_terms[,input$col11],number_of_topics = input$nooftopics)
+  })})
+  
+  # function that takes in a dataframe and the name of the columns
+  # with the document texts and the topic labels. If plot is set to
+  # false it will return the tf-idf output rather than a plot.
+  top_terms_by_topic_tfidf <- function(text_df, text_column, group_column, plot = T){
+    # name for the column we're going to unnest_tokens_ to
+    # (you only need to worry about enquo stuff if you're
+    # writing a function using using tidyverse packages)
+    group_column <- enquo(group_column)
+    text_column <- enquo(text_column)
+    
+    # get the count of each word in each review
+    words <- text_df %>%
+      unnest_tokens(word, !!text_column) %>%
+      count(!!group_column, word) %>% 
+      ungroup()
+    
+    # get the number of words per text
+    total_words <- words %>% 
+      group_by(!!group_column) %>% 
+      summarize(total = sum(n))
+    
+    # combine the two dataframes we just made
+    words <- left_join(words, total_words)
+    
+    # get the tf_idf & order the words by degree of relevence
+    tf_idf <- words %>%
+      bind_tf_idf(word, !!group_column, n) %>%
+      select(-total) %>%
+      arrange(desc(tf_idf)) %>%
+      mutate(word = factor(word, levels = rev(unique(word))))
+    
+    if(plot == T){
+      # convert "group" into a quote of a name
+      # (this is due to funkiness with calling ggplot2
+      # in functions)
+      group_name <- quo_name(group_column)
+      
+      # plot the 10 most informative terms per topic
+      tf_idf %>% 
+        group_by(!!group_column) %>% 
+        top_n(10) %>% 
+        ungroup %>%
+        ggplot(aes(word, tf_idf, fill = as.factor(group_name))) +
+        geom_col(show.legend = FALSE) +
+        labs(x = NULL, y = "tf-idf") +
+        facet_wrap(reformulate(group_name), scales = "free") +
+        coord_flip()
+    }else{
+      # return the entire tf_idf dataframe
+      return(tf_idf)
+    }
+  }
+  
+  
+  observeEvent(input$updatetflda,{output$ldaunsupervised <- renderPlot({
+    print("tfidf lda started")
+    
+    withProgress(message = 'Running TFIDF-LDA on the Text Kindly wait for results to populate',
+                 value = 0, {
+                   for (i in 1:8) {
+                     incProgress(1/8)
+                     Sys.sleep(0.75)
+                   }
+                 },env = parent.frame(n=1))
+    doc_terms<- ford()
+    
+    
+    #calling lda function
+    top_terms_by_topic_tfidf(text_df = doc_terms, # dataframe
+                             text_column = input$col11, # column with text
+                             group_column = input$callreasons, # column with topic label
+                             plot = T) # return a plot
+    #top_terms_by_topic_LDA(doc_terms[,input$col11],number_of_topics = input$nooftopics)
+  })})
+  
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
