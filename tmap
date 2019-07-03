@@ -1,0 +1,1224 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+library(tidyverse) # general utility & workflow functions
+library(tidytext) # tidy implimentation of NLP methods
+library(topicmodels) # for LDA topic modelling 
+library(tm) # general text mining functions, making document term matrixes
+library(SnowballC) # for stemming
+library(dendextend)
+library(shiny)
+library(scales)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(lattice)
+library(ggpubr)
+library(wordcloud)
+library("cowplot")
+library(rvest)
+library(dplyr)
+library(reshape2)
+library(rlang)
+library(syuzhet)
+library(pander)
+library(xlsx)
+library(ggplot2)
+library(RWeka)
+library(RWekajars)
+library(partykit)
+library(DT)
+library(shinydashboard)
+library(plotly)
+library(ggplot2)
+
+options(scipen=999)
+options(shiny.maxRequestSize=100*1024^2)
+
+
+setwd("C:/PuneetsData/TextminingApp/Text-Analysis-App-master")
+
+
+ui <- dashboardPage(skin = "purple",
+                    # skin = "red",
+                    dashboardHeader(title = "Text Analytics"),
+                    dashboardSidebar(
+                      #size = "thin", color = "teal",
+                      
+                      # actionButton("display","Display Text"),
+                      sidebarMenu(
+                        
+                        
+                        ##Tab One
+                        menuItem("Import/Selection",tabName = "file",icon = icon("file-text-o")),
+                        ##Tab Two
+                        #menuItem("Select Dataframe",tabName = "text",icon = icon("file-text-o")),
+                        ##Tab WordBreakdown
+                        menuItem("Text Cleaning",tabName = "cleaning",icon = icon("broom")),
+                        ##Tab WordBreakdown
+                        #menuItem("Word Breakdown",tabName = "breakdown",icon = icon("table")),
+                        ##Tab Three
+                        menuItem("Reports/Analysis Tab",tabName = "wordcloud",icon = icon("cloud")),
+                        ##Tab Four
+                        menuItem("First Level Results",tabName = "snd",icon = icon("table"),
+                                 menuSubItem("Analysis",icon = icon("arrows-alt"), tabName = "sndlevelreports"),
+                                 menuSubItem("Text Summary",icon = icon("arrows-alt"), tabName = "txsumm1")),   
+                        ##Tab Four
+                        menuItem("Second Level Results",tabName = "thd",icon = icon("table"),
+                                 menuSubItem("Analysis",icon = icon("arrows-alt"), tabName = "thdlevelreports"),
+                                 menuSubItem("Text Summary",icon = icon("arrows-alt"), tabName = "txsumm2")),
+                        menuItem("Topic Modelling with LDA",tabName = "unsuper",icon = icon("cloud"))
+                        
+                        
+                      )),
+                    dashboardBody(
+                      tags$style(HTML("
+                                      
+                                      
+                                      .box.box-solid.box-primary>.box-header {
+                                      
+                                      }
+                                      
+                                      .box.box-solid.box-primary{
+                                      
+                                      background:#0CD3DD
+                                      }
+                                      
+                                      ")),
+                      # tags$head(tags$style(
+                      #   type="text/css",
+                      #   "#ldaunsupervised img {max-width: 100%; width: 100%; height: auto}"
+                      # )),
+                      tags$head(tags$style("#ldaunsupervised {height:100vh !important;}")),
+                      
+                      tabItems(
+                        tabItem(tabName = "file",
+                                fileInput("selection", "Choose CSV File",
+                                          multiple = FALSE,
+                                          accept = c("text/csv",
+                                                     "text/comma-separated-values,text/plain",
+                                                     ".csv")),
+                                checkboxInput("header", "Header", TRUE),
+                                
+                                # Input: Select separator ----
+                                box(radioButtons("sep", "Separator",
+                                                 choices = c(Comma = ",",
+                                                             Semicolon = ";",
+                                                             Tab = "\t"),
+                                                 selected = ","),
+                                    
+                                    # Input: Select quotes ----
+                                    radioButtons("quote", "Quote",
+                                                 choices = c(None = "",
+                                                             "Double Quote" = '"',
+                                                             "Single Quote" = "'"),
+                                                 selected = '"'),
+                                    
+                                    # Horizontal line ----
+                                    tags$hr(),
+                                    
+                                    # Input: Select number of rows to display ----
+                                    radioButtons("disp", "Display",
+                                                 choices = c(Head = "head",
+                                                             All = "all"),
+                                                 selected = "head"),
+                                    selectInput(inputId = "data1", label = "Select the Dataset of your choice", choices = c("Nexidia Transcript","Chat Analysis","Complain Analysis")),
+                                    br()),
+                                #selectInput("analysis", "Analysis Required for", choices = c("Both Agent & Customer", "Customer only", "Agent Only"))),
+                                tableOutput("contents")
+                        ),
+                        tabItem(tabName = "cleaning",
+                                helpText(h1("Please select relevent Swtiches : Text Cleaning"),
+                                         br()),
+                                fluidRow(
+                                  helpText(h3("Original Text:")),
+                                  helpText("She woke up at       6 A.M. It\'s so early!  She was only 10% awake and began drinking coffee in front of her computer.")),
+                                box(checkboxInput(inputId = "tolow",label = "Convert text data lowercase",value = FALSE),
+                                    helpText("Transformed :"),
+                                    helpText("she woke up at       6 a.m. it's so early!  she was only 10% awake and began drinking coffee in front of her computer.")
+                                ),
+                                box(
+                                  checkboxInput(inputId = "punct",label = "Remove Punctuation",value = FALSE),
+                                  helpText("Transformed :"),
+                                  helpText("She woke up at       6 AM Its so early  She was only 10 awake and began drinking coffee in front of her computer")
+                                ),
+                                box(checkboxInput(inputId = "CDigits",label = "Remove numbers",value = FALSE),
+                                    helpText("Transformed :"),
+                                    helpText("She woke up at        A.M. It's so early!  She was only % awake and began drinking coffee in front of her computer.")
+                                ),
+                                box(
+                                  checkboxInput(inputId = "eng",label = "Remove English Stopwords",value = FALSE),
+                                  helpText("Transformed :"),
+                                  helpText("She woke         6 A.M. It's  early!  She   10% awake  began drinking coffee  front   computer.")
+                                ),
+                                br(),
+                                br(),
+                                helpText(h3("Below are two special options ,Kindly have a look on examples as they may or may not be usefull")),
+                                box(
+                                  checkboxInput(inputId = "CStemming",label = "Stemming",value = FALSE),
+                                  helpText(h5("Original:cats running ran cactus cactuses cacti community communities")),
+                                  helpText(h5("Transformed: cat run ran cactu cactus cacti commun commun"))
+                                  
+                                ),
+                                box(checkboxInput(inputId = "CLemmetizing",label = "Lemmetize",value = FALSE),
+                                    helpText(h5("Original: cats running ran cactus cactuses cacti community communities ")),
+                                    helpText(h5("Transformed: cat running ran cactus cactus cactus community community"))
+                                    
+                                ),
+                                
+                                
+                                box("Specify the words to remove", br(), "words must be separated by comma eg:- agent,citi,task ",
+                                    textInput("words", "Text input:")
+                                    #checkboxInput(inputId = "dontrun",label = "Check me if you are running text cleaning second time" ,value = FALSE)
+                                ),
+                                box(helpText(h4("For Clarifications or to add any feature write to: puneet.sinha@citi.com")),
+                                    br(),
+                                    br(),
+                                    br()),
+                                actionButton(inputId = "cleantext", label = "Clean Text"),
+                                tableOutput("textx")),
+                        
+                        tabItem(tabName = "wordcloud",
+                                
+                                helpText(paste("Total number of Transcripts selected: ")),
+                                textOutput("totalrecordsdat1"),
+                                box(width = 15, title = "Select From Below filter for better Analysis", status = "primary", solidHeader= TRUE,
+                                    
+                                    selectInput("analysis", "Analysis Required for", choices = c("Both Agent & Customer", "Customer only", "Agent Only"), selected = "Both Agent & Customer"),
+                                    checkboxInput('Isdigital','Check For Digital',FALSE),
+                                    checkboxInput('IsMRC','Check For MRC Customers',FALSE),
+                                    checkboxInput('IsHabitual','Check For Habitual Callers',FALSE),
+                                    sliderInput('Ismonthonbook','Tenure with CITI(months)',1,60,6)
+                                ),
+                                
+                                box(width = 15, title = "Below Results Is the first level results , Use the checkboxes for further level Analysis", solidHeader= TRUE),
+                                box(helpText(paste("Bigram Wordcloud")),
+                                    plotOutput("bigrampuneet"),
+                                    uiOutput("dynacheckbox"),
+                                    textOutput("checkdyworking"),
+                                    textInput("bigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                box(helpText(paste("Trigram Wordcloud")),
+                                    plotOutput("trigrampuneet"),
+                                    uiOutput("dynacheckboxtri"),
+                                    textOutput("checkdyworkingtri"),
+                                    textInput("trigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                box(helpText("The dendogram will let you know the distance of other words from higher occouring words"),
+                                    numericInput("dendoslider1", "Kindly Select sparcity :: ",value = 5),
+                                    plotlyOutput("dendofl",width = "100%", height = "800px")),
+                                #sentiment divided
+                                # fluidRow(
+                                #   textInput("removefrstlvl", "Type here if you want to remove any bi-tri gram(comma seperated) :: ",value = "Words here"),
+                                #   actionButton(inputId = "removeingfrstlvl",label = "Remove & Recalculate")),
+                                box(
+                                  helpText(paste("Each bar represents the overall percentage of each emotion present within the uploaded file.")),
+                                  
+                                  plotOutput("nrcplot",width = "100%", height = "800px"),
+                                  checkboxGroupInput('emofilter','Select Emotions to filter', c( 'Positive', 'Negative'),inline = TRUE),
+                                  br()),
+
+                                tableOutput('add_score_sentiment_display')
+                                
+                        ),
+                        tabItem(tabName = "sndlevelreports",
+                                helpText(paste("Total number of Transcripts selected: ")),
+                                textOutput("totalrecordsdat2"),
+                                box(helpText(paste("Bigram Wordcloud")),
+                                    plotOutput("sndbigrampuneet"),
+                                    uiOutput("snddynacheckbox"),
+                                    textOutput("sndcheckdyworking"),
+                                    textInput("sndbigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                box(helpText(paste("Trigram Wordcloud")),
+                                    plotOutput("sndtrigrampuneet"),
+                                    uiOutput("snddynacheckboxtri"),
+                                    textOutput("sndcheckdyworkingtri"),
+                                    textInput("sndtrigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                box(helpText("The dendogram will let you know the distance of other words from higher occouring words"),
+                                    numericInput("dendoslider2", "Kindly Select sparcity :: ",value = 3),
+                                    plotlyOutput("snddendofl",width = "100%", height = "800px")),
+                                #sentiment divided
+                                box(
+                                  helpText(
+                                    paste("Each bar represents the overall percentage of each emotion present within the uploaded file.")),
+                                  
+                                  plotOutput("sndnrcplot",width = "100%", height = "800px"),
+                                  checkboxGroupInput('sndemofilter','Select Emotions to filter', c( 'Positive', 'Negative'),inline = TRUE)),
+                                
+
+                                tableOutput('sndadd_score_sentiment_display')),
+                        
+                        tabItem(tabName = "thdlevelreports",
+                                helpText(paste("Total number of Transcripts selected: ")),
+                                textOutput("totalrecordsdat3"),
+                                box(helpText(paste("Bigram Wordcloud")),
+                                    plotOutput("thdbigrampuneet"),
+                                    uiOutput("thddynacheckbox"),
+                                    textOutput("thdcheckdyworking"),
+                                    textInput("thdbigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                box(helpText(paste("Trigram Wordcloud")),
+                                    plotOutput("thdtrigrampuneet"),
+                                    uiOutput("thddynacheckboxtri"),
+                                    textOutput("thdcheckdyworkingtri"),
+                                    textInput("thdtrigraminput", "Kindly Select words you wish to Explore(comma seperated) :: ",value = "Words here")),
+                                #sentiment divided
+                                box(
+                                  helpText(
+                                    br(),                                       br(),
+                                    
+                                    br(),
+                                    paste("Each bar represents the overall percentage of each emotion present within the uploaded file.")),
+                                  
+                                  plotOutput("thdnrcplot"),
+                                  checkboxGroupInput('thdemofilter','Select Emotions to filter', c( 'Positive', 'Negative'),inline = TRUE)),
+                                box(helpText("The dendogram will let you know the distance of other words from higher occouring words"),
+                                    numericInput("dendoslider2", "Kindly Select sparcity :: ",value = 2),
+                                    plotlyOutput("thddendofl",width = "80%", height = "500px")),
+                                tableOutput('thdadd_score_sentiment_display')),
+                        tabItem(tabName = "txsumm1",
+                                helpText(paste("Text summary for values filters in above tab:")),
+                                tableOutput("txsumm1table")
+                        ),
+                        tabItem(tabName = "txsumm2",
+                                helpText(paste("Text summary for values filters in above tab:")),
+                                tableOutput("txsumm2table")
+                        ),
+                        
+                        tabItem(tabName = "unsuper",
+                                helpText(paste("Unsupervised topic modeling with LDA"),
+                                         br(),
+                                         br(),
+                                         paste("LDA rests on the assumption that each document is going to have some subset of topics 
+                                               in it, and that each topic is associated with a certain subset of words"),
+                                         paste("What LDA outputs, then, is two estimates:"),
+                                         br(),
+                                         paste("1. An estimate of how much each topic contributes to each document"),
+                                         paste("2. An estimate of how much each word contributes to each topic")),
+                                
+                                
+                                
+                                actionButton(inputId = "updatelda", label = "Run Topic Modelling"),
+                                
+                                numericInput("nooftopics","Minimum Frequency:",value = 5),
+                                plotOutput("ldaunsupervised"),
+                                tableOutput("ldaunsuperviseddataframe"),
+                                tableOutput("gammalda")
+                                #fluidRow(plotOutput("ldaunsupervised")),
+                                
+                                
+                                ),
+                        tabItem(tabName = "super",
+                                helpText(paste("                            Supervised topic modeling with TF-IDF"),
+                                         br(),
+                                         br(),
+                                         paste("The general idea behind how TF-IDF works is this:"),
+                                         paste("What LDA outputs, then, is two estimates:"),
+                                         br(),
+                                         paste("1. Words that are very common in a specific document are probably important to the topic of that document"),
+                                         paste("2. Words that are very common in all documents probably aren't important to the topics of any of them")),
+                                textInput("col111", "Select Column in Dataframe have Raw Text :: "),
+                                textInput("callreasons", "Select Lablled column :: "),
+                                actionButton(inputId = "updatelda", label = "Run Topic Modelling"),
+                                
+                                
+                                plotOutput("ldasupervised")
+                        ),
+                        
+                        
+                        tabItem(tabName = "contact",
+                                helpText(paste("Application Author: Puneet Sinha"),
+                                         br(),
+                                         br(),
+                                         paste("Email: puneet.sinha@citi.com"),
+                                         br(),
+                                         br(),
+                                         paste("Phone: +918888835462")))
+                        
+                        
+                        
+                        
+                        
+                      ))
+                      )
+
+
+# Define server logic required to draw a histogram
+server <- function(input, output, session) {
+  
+  ford <- reactive({
+    tryCatch(
+      {
+        df <- read.csv(input$selection$datapath,
+                       header = input$header,
+                       sep = input$sep,
+                       quote = input$quote,
+                       stringsAsFactors=FALSE)
+      },
+      error = function(e) {
+        # return a safeError if a parsing error occurs
+        stop(safeError(e))
+      }
+      
+    )
+    return(df)
+  })
+  
+  
+  output$contents <- renderTable({
+    req(input$selection)
+    df<- ford()
+    if(input$disp == "head") {
+      return(head(df))
+    }
+    else {
+      return(df)
+    }
+    
+  })
+  
+  
+  dat1 <- reactive({
+    
+    if (input$analysis == "Both Agent & Customer"){
+      
+      if(is.null(data())){return()}
+      else
+        ford() %>%
+        select(i_compound_id,interaction_id,ccid,speaker,offsetstart,script) %>%
+        dplyr::distinct() %>%
+        dplyr::arrange(i_compound_id, offsetstart) %>%
+        dplyr::group_by(i_compound_id) %>%
+        dplyr::mutate(combined_text = paste0(paste(speaker,':',script), collapse = " ")) %>%
+        dplyr::slice(1) %>%
+        tibble::rowid_to_column("id")  # adding row number id variable 
+      
+    }else
+      if (input$analysis == "Customer only"){
+        
+        if(is.null(data())){return()}
+        else
+          print("customer only")
+        ford() %>%
+          select(i_compound_id,interaction_id,ccid,speaker,offsetstart,script) %>%
+          dplyr::distinct() %>%
+          dplyr::arrange(i_compound_id, offsetstart) %>%
+          dplyr::group_by(i_compound_id, speaker) %>%
+          dplyr::mutate(combined_text = paste0(script, collapse = " ")) %>%
+          dplyr::slice(1) %>%
+          dplyr::filter(speaker == "Customer") %>%
+          tibble::rowid_to_column("id")  # adding row number id variable 
+        
+      }else
+        if (input$analysis == "Agent Only"){
+          
+          if(is.null(data())){return()}
+          else
+            ford() %>%
+            select(i_compound_id,interaction_id,ccid,speaker,offsetstart,script) %>%
+            dplyr::distinct() %>%
+            dplyr::arrange(i_compound_id, offsetstart) %>%
+            dplyr::group_by(i_compound_id, speaker) %>%
+            dplyr::mutate(combined_text = paste0(script, collapse = " ")) %>%
+            dplyr::slice(1) %>%
+            dplyr::filter(speaker == "Agent") %>%
+            tibble::rowid_to_column("id")  # adding row number id variable 
+          
+        }
+  })
+  
+  output$totalrecordsdat1<- reactive({
+    nrow(dat1())
+  })
+  
+  
+  observeEvent(input$cleantext,{output$textx  <- renderTable({
+    al=isolate(allprocessingclean())
+    #data.frame('Actual'=al$prevtext,'Transformed'=al$newtext)
+    do.call(rbind, Map(data.frame, Actual=al$prevtext, Transformed=al$newtext))
+  })})
+  
+  # observeEvent(input$popword,{output$textx  <- renderTable({
+  #   al=isolate(allprocessingclean())
+  #   #data.frame('Actual'=al$prevtext,'Transformed'=al$newtext)
+  #   do.call(rbind, Map(data.frame, Actual=al$prevtext, Transformed=al$newtext))
+  # })})
+  # 
+  # 
+  
+  ##codes to return textx
+  allprocessingclean<-reactive({count=1
+  df <- dat1()
+  print("inside cleaning")
+  docs<-Corpus(VectorSource(df$combined_text))
+  prevtext<-list(docs[[1]]$content,docs[[2]]$content,docs[[3]]$content,docs[[4]]$content,docs[[5]]$content)
+  if (input$tolow){
+    print("removing lower")
+    docs<-tm_map(docs, content_transformer(tolower))
+    docs<-tm_map(docs, removeNumbers)}
+  
+  if(input$punct){
+    print("b")
+    docs<-tm_map(docs, removePunctuation)}
+  
+  if(input$eng){
+    print("e")
+    docs<-tm_map(docs,removeWords,stop_words_list)
+  }
+  
+  print("removing custom words")
+  stop_words <- read.csv('C:/PuneetsData/TextminingApp/Demotool/Stop_nexidia.csv',stringsAsFactors = FALSE)
+  stop_words_list=as.vector(stop_words$words)
+  docs<-tm_map(docs,removeWords,stop_words_list)
+  docs<-tm_map(docs, removeWords,c('citibank','ok', 'citi', 'just', 'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','then','now','says','all','can','customer','few  ','will','from','would','about','use','again','ask','asks','client','there','agent','a','any','able','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','mister','t','customer','agent','mhm','um','account','numb','just','name','know','see','also','call','right','afternoon','agent','ah','al','bank','banker','california','el','eleven','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got','because','laughter','actually','calling','hold','today','going','good','help','very','still','should','already','some','through','whats','only','anything','think','fine','once','second','them','really','put','lets','thousand','say','says','great','sorry','where','saying','since','else','more','those','which','our','welcome','everything','good','here','like',
+                                   'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','don','one','two','three','four','five','six','seven','eight',
+                                   'then','now','says','all','can','customer','will','from','would','about','ask','asks','client','there','nine','ten','twelve','thirteen','fifteen','sixteen','seventeen', 'eighteen',
+                                   'agent','a','any','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','nineteen','twenty','thirty','fifty','sixty','seventy',
+                                   'seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','eighty','ninety','hundred','know','see','also','top','jerry','ma','//','am','pm','ve','talk','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got',
+                                   'welcome','so','thank','you','its','do','if','it'))
+  
+  if(!input$words==""){
+    print("inside")
+    print(strsplit(input$words,",")[[1]])
+    print(typeof(strsplit(input$words,",")[[1]]))
+    docs<-tm_map(docs, removeWords,strsplit(input$words,",")[[1]])}
+  
+  
+  
+  if(input$CStemming){
+    print("f")
+    docs<-tm_map(docs, stemDocument, language="english")}
+  
+  #CLemmetizing
+  
+  if(input$CLemmetizing){
+    print("lemetize")
+    docs<-tm_map(docs, lemmatize_strings)}
+  docs <- tm_map(docs , stripWhitespace)
+  newtext<-list(docs[[1]]$content,docs[[2]]$content,docs[[3]]$content,docs[[4]]$content,docs[[5]]$content)
+  count=count+1
+  
+  
+  cat("cleaning count is",count)
+  if(!input$words==""){
+    print("inside")
+    print(strsplit(input$words,",")[[1]])
+    print(typeof(strsplit(input$words,",")[[1]]))
+    docs<-tm_map(docs, removeWords,strsplit(input$words,",")[[1]])}
+  
+  
+  
+  print(names(df))
+  colnames(df)[8] <- "combined_text_old"
+  print(names(df))
+  df$combined_text<-sapply(docs, paste, collapse = " ")
+  df %>% ungroup() %>% select(i_compound_id,ccid,combined_text_old,combined_text) -> CNR_tibble_cleaned
+  #df %>% ungroup() -> CNR_tibble_cleaned
+  
+  #print(head(df$combined_text))
+  print(names(CNR_tibble_cleaned))
+  #return(data.frame(Actual=prevtext,Transformed=newtext))
+  write.csv(CNR_tibble_cleaned,file='C:/PuneetsData/TextminingApp/hysa/working_tmtool.csv')
+  return(list(df=CNR_tibble_cleaned,docs=docs,prevtext=prevtext,newtext=newtext))
+  })
+  
+  allprocessingclean1<- reactive({
+    df=read.csv('C:/PuneetsData/TextminingApp/hysa/working_tmtool.csv',stringsAsFactors = FALSE)
+  })
+  
+  #################33tidy approah
+  dat1_2grams <- reactive({
+    
+    allprocessingclean()$df %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 2)   %>%
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::count(word1, word2, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2))   %>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2,"(",n,")"))
+  })
+  dat1_3grams <- reactive({
+    
+    allprocessingclean()$df %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 3) %>%
+      tidyr::separate(bigram, c("word1", "word2", "word3"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::filter(word2 != word3) %>%
+      dplyr::filter(word1 != word3 ) %>%
+      dplyr::count(word1, word2, word3, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2, " ", word3))%>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2, " ", word3,"(",n,")"))
+  })
+  
+  output$bigrampuneet <- renderPlot({
+    
+    dat1_2grams() %>%
+      with(wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$trigrampuneet <- renderPlot({
+    
+    dat1_3grams() %>%
+      with(wordcloud::wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$dynacheckbox = renderUI({
+    checkboxGroupInput('otdynabi', 'select the word you want to focus on: ',head(dat1_2grams()$bigram_text_freq,35),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  output$dynacheckboxtri = renderUI({
+    checkboxGroupInput('otdynatri', 'select the word you want to focus on: ',head(dat1_3grams()$bigram_text_freq,35),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  
+  output$checkdyworking <- reactive({
+    print(input$otdynabi)
+    input$otdynabi
+    gsub("\\(|)","",gsub('[0-9]+', '', input$otdynabi))
+  })
+  output$checkdyworkingtri <- reactive({
+    print(input$otdynatri)
+    gsub("\\(|)","",gsub('[0-9]+', '', input$otdynatri))
+  })
+  
+  #############dendogram code####
+  output$dendofl<- renderPlotly({
+    for_dendo=allprocessingclean()$df %>% 
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 4) %>% 
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2)) %>% 
+      dplyr::group_by(i_compound_id) %>% dplyr::count(bigram_text) 
+    print(head(for_dendo))
+    
+    dendo_corr=for_dendo %>% 
+      mutate(Propi=n/sum(n)) %>% 
+      subset(n >input$dendoslider1) %>% 
+      select(-n) %>% 
+      spread(bigram_text,Propi)
+    dendo_corr[is.na(dendo_corr)] <- 0
+    
+    dendo_corr_t= t(dendo_corr[,-1])
+    
+    dendo_dist= dist(dendo_corr_t,method = "euclidean")
+    fit=hclust(dendo_dist,method = "ward.D")
+    #plot(fit)
+    
+    dend<- fit %>% as.dendrogram %>% hang.dendrogram %>% set("labels_cex",.4) %>%
+      set("branches_lwd", .1) %>%
+      set("branches_k_color") 
+    ggd1 <- as.ggdend(dend)
+    gg=ggplot(ggd1, horiz = TRUE )
+    ggplotly(gg)%>%
+      layout(showlegend = FALSE)
+    
+  })
+  
+  add_score_sentiment = reactive({
+    allprocessingclean()$df %>%
+      mutate(sentiment = syuzhet::get_sentiment(combined_text))%>%
+      mutate(sentiment_pn =ifelse(sentiment > 6, "Positive", "Negetive"))%>%
+      ungroup()%>%
+      select(i_compound_id,ccid,combined_text_old,combined_text,sentiment,sentiment_pn)
+    
+    
+  })
+  
+  output$add_score_sentiment_display = renderTable({
+    head(add_score_sentiment(),20)
+  })
+  
+  
+  ##Emotional Sentiment Analysis ###########
+  output$nrcplot<-renderPlot({
+    add_score_sentiment() %>%
+      count(sentiment_pn) %>%
+      ggplot2::ggplot(ggplot2::aes(sentiment_pn, n)) +
+      ggplot2::geom_col(fill = c("#f46b42", "#41f486")) +
+      # ggplot2::coord_flip() +
+      ggplot2::ylab("Count") +
+      ggthemes::theme_igray()
+    
+  })
+  
+  # ################3new change on 27 june for removing phrases from first level reports##########33
+  # observeEvent(input$removeingfrstlvl,{output$add_score_sentiment  <- renderTable({
+  #   al=isolate(allprocessingclean())
+  #   #data.frame('Actual'=al$prevtext,'Transformed'=al$newtext)
+  #   do.call(rbind, Map(data.frame, Actual=al$prevtext, Transformed=al$newtext))
+  # })})
+  
+  
+  
+  ###################33for first level analysis
+  
+  dat2 <- reactive({
+    print("calculating dat2")
+    
+    df1=add_score_sentiment()
+    print("step1")
+    if(!(input$bigraminput=="Words here") & !(input$trigraminput=="Words here")){
+      # worddd=c('ACCOUNT INFORMATION','THEY DO')
+      # Complaints[grep(paste0(worddd, collapse = "|"), Complaints$script),]
+      #c(as.character(a), as.character(b))
+      print("Both bi and tri present")
+      print(paste0(c(strsplit(input$bigraminput,",")[[1]],strsplit(input$trigraminput,",")[[1]]), collapse = "|"))
+      dfnew=df1[grep(paste0(c(strsplit(input$bigraminput,",")[[1]],strsplit(input$trigraminput,",")[[1]]), collapse = "|"), df1$combined_text),]
+      
+      #df %>% filter(str_detect(LocationID, '\\b(strsplit(input$words,"|")[[1]])\\b'))
+      
+    }
+    else if(!(input$bigraminput=="Words here")){
+      print("bi present")
+      print(input$bigraminput)
+      print(strsplit(input$bigraminput,",")[[1]])
+      print(paste0(strsplit(input$bigraminput,",")[[1]], collapse = "|"))
+      dfnew=df1[grep(paste0(strsplit(input$bigraminput,",")[[1]], collapse = "|"), df1$combined_text),]
+    }
+    else if(!(input$trigraminput=="Words here")){
+      print("tri present")
+      print(paste0(strsplit(input$trigraminput,","), collapse = "|"))
+      dfnew=df1[grep(paste0(strsplit(input$trigraminput,",")[[1]], collapse = "|"), df1$combined_text),]
+    }
+    else
+    {
+      print("no input for analysis")
+      dfnew=df1
+    }
+    print("will check for P/N")
+    if(length(input$emofilter) != 0){
+      if(input$emofilter=="Positive"){
+        print("qualified for positive")
+        dfnew=df1 %>% filter(sentiment_pn=="Positive")
+      }
+      else if(input$emofilter=="Negative")
+      {
+        print("qualified for negative")
+        dfnew=df1 %>% filter(sentiment_pn =="Negative")
+      }
+    }
+    
+    print("calculated dat2")
+    return(dfnew)
+    
+  })
+  
+  output$totalrecordsdat2<- reactive({
+    nrow(dat2())
+  })
+  
+  #####################################################changes 10th june
+  #################33tidy approah
+  dat2_2grams <- reactive({
+    
+    dat2() %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 2)   %>%
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::count(word1, word2, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2))   %>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2,"(",n,")"))
+  })
+  dat2_3grams <- reactive({
+    
+    dat2() %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 3) %>%
+      tidyr::separate(bigram, c("word1", "word2", "word3"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::filter(word2 != word3) %>%
+      dplyr::filter(word1 != word3 ) %>%
+      dplyr::count(word1, word2, word3, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2, " ", word3))%>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2, " ", word3,"(",n,")"))
+  })
+  
+  output$sndbigrampuneet <- renderPlot({
+    
+    dat2_2grams() %>%
+      with(wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$sndtrigrampuneet <- renderPlot({
+    
+    dat2_3grams() %>%
+      with(wordcloud::wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$snddynacheckbox = renderUI({
+    checkboxGroupInput('sndotdynabi', 'select the word you want to focus on: ',head(dat2_2grams()$bigram_text_freq,30),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  output$snddynacheckboxtri = renderUI({
+    checkboxGroupInput('sndotdynatri', 'select the word you want to focus on: ',head(dat2_3grams()$bigram_text_freq,30),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  
+  output$sndcheckdyworking <- reactive({
+    print(input$sndotdynabi)
+    input$sndotdynabi
+  })
+  output$sndcheckdyworkingtri <- reactive({
+    print(input$sndotdynatri)
+    input$sndotdynatri
+  })
+  
+  #############dendogram code####
+  output$snddendofl<- renderPlotly({
+    for_dendo=dat2() %>% 
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 2) %>% 
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2)) %>% 
+      dplyr::group_by(i_compound_id) %>% dplyr::count(bigram_text) 
+    print(head(for_dendo))
+    
+    dendo_corr=for_dendo %>% 
+      mutate(Propi=n/sum(n)) %>% 
+      subset(n >input$dendoslider2) %>% 
+      select(-n) %>% 
+      spread(bigram_text,Propi)
+    dendo_corr[is.na(dendo_corr)] <- 0
+    
+    dendo_corr_t= t(dendo_corr[,-1])
+    
+    dendo_dist= dist(dendo_corr_t,method = "euclidean")
+    fit=hclust(dendo_dist,method = "ward.D")
+    plot(fit)
+    
+    dend<- fit %>% as.dendrogram %>% hang.dendrogram %>% set("labels_cex",.4) %>%
+      set("branches_lwd", .1) %>%
+      set("branches_k_color") 
+    ggd1 <- as.ggdend(dend)
+    gg=ggplot(ggd1, horiz = TRUE )
+    ggplotly(gg)%>%
+      layout(showlegend = FALSE)
+  })
+  
+  sndadd_score_sentiment = reactive({
+    dat2() %>%
+      mutate(sentiment = syuzhet::get_sentiment(combined_text))%>%
+      mutate(sentiment_pn =ifelse(sentiment > 6, "Positive", "Negetive"))%>%
+      ungroup()%>%
+      select(ccid,combined_text_old,combined_text,sentiment,sentiment_pn)
+    
+    
+  })
+  
+  output$sndadd_score_sentiment_display = renderTable({
+    head(sndadd_score_sentiment(),20)
+  })
+  
+  
+  ##Emotional Sentiment Analysis ###########
+  output$sndnrcplot<-renderPlot({
+    sndadd_score_sentiment() %>%
+      count(sentiment_pn) %>%
+      ggplot2::ggplot(ggplot2::aes(sentiment_pn, n)) +
+      ggplot2::geom_col(fill = c("#f46b42", "#41f486")) +
+      # ggplot2::coord_flip() +
+      ggplot2::ylab("Count") +
+      ggthemes::theme_igray()
+    
+  })
+  
+  
+  ##################################################################### 
+  
+  ######################## text Summary Tab 1  ##################33
+  
+  split_line <- function(x, n, pattern, collapse = pattern, ...) {
+    x_split <- strsplit(x, pattern, perl = TRUE, ...)[[1]]
+    out <- character(ceiling(length(x_split) / n))
+    for (i in seq_along(out)) {
+      entry <- x_split[seq((i - 1) * n + 1, i * n, by = 1)]
+      out[i] <- paste0(entry[!is.na(entry)], collapse = collapse)
+    }
+    out
+  }
+  
+  
+  # output$txsumm1table <- renderTable({
+  #   #write.csv(dat2(),file='C:/PuneetsData/TextminingApp/Demotool/card_not_received_Q.csv')
+  #   print("Inside txsumm1table")
+  #   # text_summ_stop=c('citibank','ok', 'citi', 'just', 'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','then','now','says','all','can','customer','few  ','will','from','would','about','use','again','ask','asks','client','there','agent','a','any','able','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','mister','t','customer','agent','mhm','um','account','numb','just','name','know','see','also','call','right','afternoon','agent','ah','al','bank','banker','california','el','eleven','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got','because','laughter','actually','calling','hold','today','going','good','help','very','still','should','already','some','through','whats','only','anything','think','fine','once','second','them','really','put','lets','thousand','say','says','great','sorry','where','saying','since','else','more','those','which','our','welcome','everything','good','here','like',
+  #   #                  'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','don','one','two','three','four','five','six','seven','eight',
+  #   #                  'then','now','says','all','can','customer','will','from','would','about','ask','asks','client','there','nine','ten','twelve','thirteen','fifteen','sixteen','seventeen', 'eighteen',
+  #   #                  'agent','a','any','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','nineteen','twenty','thirty','fifty','sixty','seventy',
+  #   #                  'seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','eighty','ninety','hundred','know','see','also','top','jerry','ma','//','am','pm','ve','talk','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got',
+  #   #                  'welcome')
+  #   df<- dat2()
+  #   # print(names(df))
+  #   # docs<-Corpus(VectorSource(df$combined_text_old))
+  #   # docs<-tm_map(docs, removeNumbers)
+  #   # docs <- tm_map(docs , stripWhitespace)
+  #   # docs<-tm_map(docs, removePunctuation)
+  #   # docs<-tm_map(docs, removeWords,text_summ_stop)
+  #   # docs <- tm_map(docs , stripWhitespace)
+  #   # df$summ_text<-sapply(docs, paste, collapse = " ")
+  #   write("TEXT",file="C:/PuneetsData/TextminingApp/Demotool/writefile.csv")
+  #   for( i in seq(1,length(df$combined_text_old))){
+  #     t=split_line(df$combined_text_old[i],80,pattern = " ")
+  #     write(t,file="C:/PuneetsData/TextminingApp/Demotool/writefile.csv",append = TRUE)
+  #   }
+  #   newdf=read.csv("C:/PuneetsData/TextminingApp/Demotool/writefile.csv")
+  #   dat1_tidy_summary<-newdf %>%
+  #     select(TEXT)%>%
+  #     dplyr::mutate(text = gsub(x = TEXT, pattern = "[^\\p{L}']+"," ", perl=TRUE)) %>%
+  #     dplyr::mutate(text = stringr::str_replace_all(string = text, pattern = c("UNK"), replacement = " ")) %>%
+  #     dplyr::mutate(text = stringr::str_replace_all(string = text, pattern = c("  "), replacement = " "))
+  #   all_sentences=paste(dat1_tidy_summary$text,collapse = " . ")
+  #   print("summ running on dat2")
+  #   top_n<-  lexRankr::lexRank(all_sentences,
+  #                              docId = rep(1, length(all_sentences)),
+  #                              n = 25,   #input
+  #                              continuous = TRUE) %>% 
+  #     dplyr::arrange(value) %>% dplyr::select(sentence)
+  #   
+  # })
+  # 
+  
+  #####$$$$$$$$$$$$$$$$$$$$$$$$$  Calculate Dat3  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+  
+  dat3 <- reactive({
+    print("calculating dat3")
+    
+    df2=sndadd_score_sentiment()
+    print(head(df2,1))
+    print("thdstep1")
+    if(!(input$sndbigraminput=="Words here") & !(input$sndtrigraminput=="Words here")){
+      # worddd=c('ACCOUNT INFORMATION','THEY DO')
+      # Complaints[grep(paste0(worddd, collapse = "|"), Complaints$script),]
+      #c(as.character(a), as.character(b))
+      print("Both bi and tri present thd")
+      print(paste0(c(strsplit(input$sndbigraminput,",")[[1]],strsplit(input$sndtrigraminput,",")[[1]]), collapse = "|"))
+      dfnew=df2[grep(paste0(c(strsplit(input$sndbigraminput,",")[[1]],strsplit(input$sndtrigraminput,",")[[1]]), collapse = "|"), df2$combined_text),]
+      
+      #df %>% filter(str_detect(LocationID, '\\b(strsplit(input$words,"|")[[1]])\\b'))
+      
+    }
+    else if(!(input$sndbigraminput=="Words here")){
+      print("bi present thd")
+      print(input$sndbigraminput)
+      print(strsplit(input$sndbigraminput,",")[[1]])
+      print(paste0(strsplit(input$sndbigraminput,",")[[1]], collapse = "|"))
+      dfnew=df2[grep(paste0(strsplit(input$sndbigraminput,",")[[1]], collapse = "|"), df2$combined_text),]
+    }
+    else if(!(input$sndtrigraminput=="Words here")){
+      print("tri present thd")
+      print(paste0(strsplit(input$sndtrigraminput,","), collapse = "|"))
+      dfnew=df2[grep(paste0(strsplit(input$sndtrigraminput,",")[[1]], collapse = "|"), df2$combined_text),]
+      print(head(dfnew,1))
+    }
+    else
+    {
+      print("no input for analysis")
+      dfnew=df2
+    }
+    print("will check for P/N")
+    if(length(input$sndemofilter) != 0){
+      if(input$emofilter=="Positive"){
+        print("qualified for positive")
+        dfnew=df2 %>% filter(sentiment_pn=="Positive")
+      }
+      else if(input$emofilter=="Negative")
+      {
+        print("qualified for negative")
+        dfnew=df2 %>% filter(sentiment_pn =="Negative")
+      }
+    }
+    print("calculated dat3")
+    return(dfnew)
+    
+  })
+  
+  output$totalrecordsdat3<- reactive({
+    nrow(dat3())
+  })
+  
+  #####################################################changes 10th june
+  #################tidy approah
+  dat3_2grams <- reactive({
+    
+    dat3() %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 2)   %>%
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::count(word1, word2, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2))   %>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2,"(",n,")"))
+  })
+  dat3_3grams <- reactive({
+    
+    dat3() %>%
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 3) %>%
+      tidyr::separate(bigram, c("word1", "word2", "word3"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::filter(word2 != word3) %>%
+      dplyr::filter(word1 != word3 ) %>%
+      dplyr::count(word1, word2, word3, sort = TRUE) %>% 
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2, " ", word3))%>%
+      dplyr::mutate(bigram_text_freq = paste0(word1, " ", word2, " ", word3,"(",n,")"))
+  })
+  
+  output$thdbigrampuneet <- renderPlot({
+    
+    dat3_2grams() %>%
+      with(wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$thdtrigrampuneet <- renderPlot({
+    
+    dat3_3grams() %>%
+      with(wordcloud::wordcloud(bigram_text, n, max.words = 30,scale = c(2,.2),colors = brewer.pal(8,"Dark2")))
+  })
+  
+  output$thddynacheckbox = renderUI({
+    checkboxGroupInput('thdotdynabi', 'select the word you want to focus on: ',head(dat3_2grams()$bigram_text_freq,20),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  output$thddynacheckboxtri = renderUI({
+    checkboxGroupInput('thdotdynatri', 'select the word you want to focus on: ',head(dat3_3grams()$bigram_text_freq,20),inline = TRUE)
+    #tags$style(type="text/css", HTML("#test>*{float: left; margin-right: 15px; height: 20px;} #test {height: 20px;}"))
+  })
+  
+  output$thdcheckdyworking <- reactive({
+    print(input$thdotdynabi)
+    input$thdotdynabi
+  })
+  output$thdcheckdyworkingtri <- reactive({
+    print(input$thdotdynatri)
+    input$thdotdynatri
+  })
+  
+  #############dendogram code####
+  output$thddendofl<- renderPlotly({
+    tdm<-TermDocumentMatrix(Corpus(VectorSource(dat3()$combined_text)))
+    review_tdm <- removeSparseTerms(tdm, sparse=input$dendoslider3)
+    #hc <- hclust(d = dist(tdm),method = "ward.D2")
+    hc=dist(as.matrix(review_tdm), method = "euclidean")
+    dend<- hc  %>% dist %>% hclust %>% as.dendrogram %>% set("labels_cex",.4) %>%
+      set("branches_lwd", .1) %>%
+      set("branches_k_color") 
+    ggd1 <- as.ggdend(dend)
+    gg=ggplot(ggd1, horiz = TRUE )
+    ggplotly(gg)%>%
+      layout(showlegend = FALSE)
+  })
+  
+  thdadd_score_sentiment = reactive({
+    dat3() %>%
+      mutate(sentiment = syuzhet::get_sentiment(combined_text))%>%
+      mutate(sentiment_pn =ifelse(sentiment > 6, "Positive", "Negetive"))%>%
+      ungroup()%>%
+      select(ccid,combined_text_old,combined_text,sentiment,sentiment_pn)
+    
+    
+  })
+  
+  output$thdadd_score_sentiment_display = renderTable({
+    head(thdadd_score_sentiment(),20)
+  })
+  
+  
+  ##Emotional Sentiment Analysis ###########
+  output$thdnrcplot<-renderPlot({
+    thdadd_score_sentiment() %>%
+      count(sentiment_pn) %>%
+      ggplot2::ggplot(ggplot2::aes(sentiment_pn, n)) +
+      ggplot2::geom_col(fill = c("#f46b42", "#41f486")) +
+      # ggplot2::coord_flip() +
+      ggplot2::ylab("Count") +
+      ggthemes::theme_igray()
+    
+  })
+  
+  
+  ##################### text summ 2 #######################3
+  
+  output$txsumm2table <- renderTable({
+    print("Inside txsumm1table")
+    text_summ_stop=c('citibank','ok', 'citi', 'just', 'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','then','now','says','all','can','customer','few  ','will','from','would','about','use','again','ask','asks','client','there','agent','a','any','able','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','mister','t','customer','agent','mhm','um','account','numb','just','name','know','see','also','call','right','afternoon','agent','ah','al','bank','banker','california','el','eleven','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got','because','laughter','actually','calling','hold','today','going','good','help','very','still','should','already','some','through','whats','only','anything','think','fine','once','second','them','really','put','lets','thousand','say','says','great','sorry','where','saying','since','else','more','those','which','our','welcome','everything','good','here','like',
+                     'i','the','was','and','that','she','for','with','has','her','having','his','get','been','why','but','when','this','had','into','have','did','being','him','said','to','is','on','he','in','were','they','their','are','don','one','two','three','four','five','six','seven','eight',
+                     'then','now','says','all','can','customer','will','from','would','about','ask','asks','client','there','nine','ten','twelve','thirteen','fifteen','sixteen','seventeen', 'eighteen',
+                     'agent','a','any','or','okay','will','um','can','yes','gonna','tell','moment','hello','please','let','may','mhm','oh','nineteen','twenty','thirty','fifty','sixty','seventy',
+                     'seven','five','four','three','eight','six','zero','one','two','ma','sir','sure','bye','get','uh','unk','maam','nine','eighty','ninety','hundred','know','see','also','top','jerry','ma','//','am','pm','ve','talk','fifteen','fifty','forty','fourteen','hundred','husband','id','ill','im','ive','john','johnson','nineteen','ninety','per','set','seventeen','seventy','shes','si','sixteen','sixty','somebody','someone','something','su','ten','thats','theres','theyre','thing','thirty','uh','uhuh','unk','us','wanna','want','youll','youre','much','yeah','alright','got',
+                     'welcome')
+    df<- dat3()
+    docs<-Corpus(VectorSource(df$combined_text_old))
+    docs<-tm_map(docs, removeNumbers)
+    docs <- tm_map(docs , stripWhitespace)
+    docs<-tm_map(docs, removePunctuation)
+    docs<-tm_map(docs, removeWords,text_summ_stop)
+    docs <- tm_map(docs , stripWhitespace)
+    df$summ_text<-sapply(docs, paste, collapse = " ")
+    write("TEXT",file="C:/PuneetsData/TextminingApp/Demotool/writefile.csv")
+    for( i in seq(1,length(df$summ_text))){
+      t=split_line(df$summ_text[i],100,pattern = " ")
+      write(t,file="C:/PuneetsData/TextminingApp/Demotool/writefile.csv",append = TRUE)
+    }
+    newdf=read.csv("C:/PuneetsData/TextminingApp/Demotool/writefile.csv")
+    all_sentences=paste(newdf$summ_text,collapse = " . ")
+    print("summ running on dat2")
+    top_n<-  lexRankr::lexRank(all_sentences,
+                               docId = rep(1, length(all_sentences)),
+                               n = 25,   #input
+                               continuous = TRUE) %>% 
+      dplyr::arrange(value) %>% dplyr::select(sentence)
+    
+  })
+  
+  
+  
+  
+  LDA_RUN<- reactive({
+    print('RUN_LDA')
+    al<- allprocessingclean()
+    dtm <- al$df %>% 
+      tidytext::unnest_tokens(bigram, combined_text, token = "ngrams", n = 2) %>% 
+      tidyr::separate(bigram, c("word1", "word2"), sep = " ") %>% 
+      dplyr::filter(word1 != word2) %>%
+      dplyr::mutate(bigram_text = paste0(word1, " ", word2)) %>% 
+      dplyr::group_by(i_compound_id) %>% dplyr::count(bigram_text) %>% 
+      cast_dtm( i_compound_id,bigram_text, n)
+
+    print(paste('no of topics selected: ',input$nooftopics))
+    lda <- LDA(dtm, k = input$nooftopics, method = "Gibbs",  control = list(seed = 2, verbose = 1,iter=1500))
+    return(list(lda=lda,dtm=dtm,df=al$df))
+  })
+  output$ldaunsupervised <- renderPlot({
+    print("lda started")
+    #calling lda function
+    LDA_fun<-LDA_RUN()
+    lda<-LDA_fun$lda
+    topics <- tidy(lda, matrix = "beta")
+    top_terms <- topics  %>% # take the topics data frame and..
+      group_by(topic) %>% # treat each topic as a different group
+      top_n(15, beta) %>% # get the top 10 most informative words
+      ungroup() %>% # ungroup
+      arrange(topic, -beta)
+    print(top_terms)# arrange words in descending informativeness
+    top_terms %>% # take the top terms
+      mutate(term = reorder(term, beta)) %>% # sort terms by beta value 
+      ggplot(aes(term, beta, fill = factor(topic))) + # plot beta by theme
+      geom_col(show.legend = FALSE) + # as a bar plot
+      facet_wrap(~ topic, scales = "free") + # which each topic in a seperate plot
+      labs(x = NULL, y = "Beta") + # no x label, change y label 
+      coord_flip() # turn bars sideways
+  })
+  output$ldaunsuperviseddataframe <- renderTable({
+    ldaOut.topics <- as.matrix(topics(LDA_RUN()$lda))
+    table(ldaOut.topics)
+  })
+  
+  output$gammalda <- renderTable({
+    print("lda table")
+    LDA_fun<-LDA_RUN()
+    gammatib=tidy(LDA_fun$lda, matrix = "gamma") %>% 
+      dplyr::rename(i_compound_id=document) %>%
+      mutate(i_compound_id=as.character(i_compound_id)) %>% 
+      ungroup() %>%  
+      
+      dplyr::inner_join( LDA_fun$df[c('i_compound_id','ccid','combined_text_old','combined_text')] %>% 
+                           mutate(i_compound_id=as.character(i_compound_id)),by="i_compound_id") %>% 
+      arrange(desc(gamma)) %>% 
+      group_by(topic) %>% 
+      slice(1:5)
+    
+    
+  })
+  
+  # function that takes in a dataframe and the name of the columns
+  # with the document texts and the topic labels. If plot is set to
+  # false it will return the tf-idf output rather than a plot.
+  top_terms_by_topic_tfidf <- function(text_df, text_column, group_column, plot = T){
+    # name for the column we're going to unnest_tokens_ to
+    # (you only need to worry about enquo stuff if you're
+    # writing a function using using tidyverse packages)
+    group_column <- enquo(group_column)
+    text_column <- enquo(text_column)
+    
+    # get the count of each word in each review
+    words <- text_df %>%
+      unnest_tokens(word, !!text_column) %>%
+      count(!!group_column, word) %>% 
+      ungroup()
+    
+    # get the number of words per text
+    total_words <- words %>% 
+      group_by(!!group_column) %>% 
+      summarize(total = sum(n))
+    
+    # combine the two dataframes we just made
+    words <- left_join(words, total_words)
+    
+    # get the tf_idf & order the words by degree of relevence
+    tf_idf <- words %>%
+      bind_tf_idf(word, !!group_column, n) %>%
+      select(-total) %>%
+      arrange(desc(tf_idf)) %>%
+      mutate(word = factor(word, levels = rev(unique(word))))
+    
+    if(plot == T){
+      # convert "group" into a quote of a name
+      # (this is due to funkiness with calling ggplot2
+      # in functions)
+      group_name <- quo_name(group_column)
+      
+      # plot the 10 most informative terms per topic
+      tf_idf %>% 
+        group_by(!!group_column) %>% 
+        top_n(10) %>% 
+        ungroup %>%
+        ggplot(aes(word, tf_idf, fill = as.factor(group_name))) +
+        geom_col(show.legend = FALSE) +
+        labs(x = NULL, y = "tf-idf") +
+        facet_wrap(reformulate(group_name), scales = "free") +
+        coord_flip()
+    }else{
+      # return the entire tf_idf dataframe
+      return(tf_idf)
+    }
+  }
+  observeEvent(input$puntua,{output$ldasupervised <- renderText({
+    print("remove puntuation")
+    doc_terms<- dat1()
+    doc_terms<-doc_terms[,'combined_text']
+    
+    
+    
+  })})
+  
+  observeEvent(input$updatetflda,{output$ldaunsupervised <- renderPlot({
+    print("tfidf lda started")
+    
+    withProgress(message = 'Running TFIDF-LDA on the Text Kindly wait for results to populate',
+                 value = 0, {
+                   for (i in 1:8) {
+                     incProgress(1/8)
+                     Sys.sleep(0.75)
+                   }
+                 },env = parent.frame(n=1))
+    doc_terms<- dat1()
+    
+    
+    #calling lda function
+    top_terms_by_topic_tfidf(text_df = doc_terms, # dataframe
+                             text_column = input$col11, # column with text
+                             group_column = input$callreasons, # column with topic label
+                             plot = T) # return a plot
+    #top_terms_by_topic_LDA(doc_terms[,'combined_text'],number_of_topics = input$nooftopics)
+  })})
+  
+}
+
+# output$downloadfive <- downloadHandler(
+#   filename = function() { paste("Emotion by Sentence Breakdown",input$name, sep='',".csv") },
+#   content = function(file) {
+#     write.csv(texterdf5(), file)
+#     
+#   })
+# 
+# output$downloadfive <- downloadHandler(
+#   filename = function() { paste("Emotion by Sentence Breakdown",input$name, sep='',".csv") },
+#   content = function(file) {
+#     write.csv(texterdf5(), file)
+#     
+#   })
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+
